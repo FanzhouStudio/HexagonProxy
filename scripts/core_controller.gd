@@ -373,6 +373,7 @@ func use_v2_share_links(content: String) -> bool:
 	var uri_count := 0
 	var has_uri := false
 	var invalid_preview := ""
+	var uri_lines: Array[String] = []
 	for line in cleaned.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
 		var item := line.strip_edges()
 		if item.is_empty():
@@ -384,6 +385,7 @@ func use_v2_share_links(content: String) -> bool:
 				if matched:
 					has_uri = true
 					uri_count += 1
+					uri_lines.append(item)
 				break
 		if not matched and invalid_preview.is_empty():
 			invalid_preview = item.left(24)
@@ -408,6 +410,7 @@ func use_v2_share_links(content: String) -> bool:
 				if decoded_item.to_lower().begins_with(scheme) and _is_plausible_share_uri(decoded_item, scheme):
 					decoded_matched = true
 					uri_count += 1
+					uri_lines.append(decoded_item)
 					break
 			if not decoded_matched:
 				event_logged.emit("Base64 订阅中包含无法识别的节点。")
@@ -417,21 +420,44 @@ func use_v2_share_links(content: String) -> bool:
 			return false
 	var entry_id := _new_subscription_id()
 	var provider_name := "%s-v2.txt" % entry_id
-	var yaml := _v2_profile_yaml(provider_name)
+	var normalized := _normalize_v2_provider_lines(uri_lines, entry_id)
+	var regular_lines: Array[String] = normalized.get("regular_lines", [])
+	var hy2_yaml := str(normalized.get("hy2_yaml", ""))
+	var regular_provider_name := provider_name if not regular_lines.is_empty() else ""
+	var hy2_provider_name := "%s-hy2.yaml" % entry_id if not hy2_yaml.is_empty() else ""
+	var yaml := _v2_profile_yaml(regular_provider_name, hy2_provider_name)
 	var display_name := "V2 分享链接 · %s" % Time.get_datetime_string_from_system(false, true).replace("T", " ")
 	if uri_count > 0:
 		display_name += " · %d 个节点" % uri_count
-	if not _write_text_atomic(subscription_provider_dir().path_join(provider_name), cleaned + "\n"):
+	if not regular_provider_name.is_empty() and not _write_text_atomic(subscription_provider_dir().path_join(regular_provider_name), "\n".join(regular_lines) + "\n"):
 		event_logged.emit("无法保存 V2 节点文件。")
 		return false
-	if not _save_subscription(entry_id, display_name, "v2", yaml, provider_name):
-		DirAccess.remove_absolute(subscription_provider_dir().path_join(provider_name))
+	if not hy2_provider_name.is_empty() and not _write_text_atomic(subscription_provider_dir().path_join(hy2_provider_name), hy2_yaml):
+		if not regular_provider_name.is_empty():
+			DirAccess.remove_absolute(subscription_provider_dir().path_join(regular_provider_name))
+		event_logged.emit("无法保存 Hysteria2 节点文件。")
+		return false
+	if not _save_subscription(entry_id, display_name, "v2", yaml, regular_provider_name, {"hy2_provider_file": hy2_provider_name}):
+		for generated_file in [regular_provider_name, hy2_provider_name]:
+			if not generated_file.is_empty():
+				DirAccess.remove_absolute(subscription_provider_dir().path_join(generated_file))
 		return false
 	_activate_subscription(entry_id, false)
 	event_logged.emit("V2 节点已导入；链接仅保存在本机。")
 	return true
 
-func _v2_profile_yaml(provider_name: String) -> String:
+func _v2_profile_yaml(provider_name: String, hy2_provider_name := "") -> String:
+	var provider_yaml := ""
+	var provider_uses: Array[String] = []
+	if not provider_name.is_empty():
+		provider_yaml += "  hexagon-v2:\n    type: file\n    path: ./providers/library/%s\n" % provider_name
+		provider_uses.append("hexagon-v2")
+	if not hy2_provider_name.is_empty():
+		provider_yaml += "  hexagon-v2-hy2:\n    type: file\n    path: ./providers/library/%s\n" % hy2_provider_name
+		provider_uses.append("hexagon-v2-hy2")
+	var use_yaml := ""
+	for provider_id in provider_uses:
+		use_yaml += "      - %s\n" % provider_id
 	return """# 六角代理生成的 V2 分享链接配置
 mixed-port: 7890
 allow-lan: false
@@ -444,24 +470,152 @@ profile:
   store-selected: true
   store-fake-ip: true
 proxy-providers:
-  hexagon-v2:
-    type: file
-    path: ./providers/library/%s
-proxy-groups:
+%sproxy-groups:
   - name: 六角选择
     type: select
     use:
-      - hexagon-v2
-  - name: 自动优选
+%s  - name: 自动优选
     type: url-test
     use:
-      - hexagon-v2
-    url: https://www.gstatic.com/generate_204
+%s    url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 80
 rules:
   - MATCH,六角选择
-""" % provider_name
+""" % [provider_yaml, use_yaml, use_yaml]
+
+func _normalize_v2_provider_lines(uri_lines: Array[String], entry_id: String) -> Dictionary:
+	var regular_lines: Array[String] = []
+	var hy2_nodes: Array[Dictionary] = []
+	for line in uri_lines:
+		var lower := line.to_lower()
+		if lower.begins_with("hysteria2://") or lower.begins_with("hy2://"):
+			var node := _parse_hysteria2_uri(line)
+			if not node.is_empty():
+				hy2_nodes.append(node)
+				continue
+		regular_lines.append(line)
+	return {
+		"regular_lines": regular_lines,
+		"hy2_yaml": _hysteria2_provider_yaml(hy2_nodes, entry_id) if not hy2_nodes.is_empty() else ""
+	}
+
+func _parse_hysteria2_uri(link: String) -> Dictionary:
+	var scheme_end := link.find("://")
+	if scheme_end < 0:
+		return {}
+	var payload := link.substr(scheme_end + 3)
+	var fragment := ""
+	var fragment_position := payload.find("#")
+	if fragment_position >= 0:
+		fragment = payload.substr(fragment_position + 1).uri_decode()
+		payload = payload.left(fragment_position)
+	var query := ""
+	var query_position := payload.find("?")
+	if query_position >= 0:
+		query = payload.substr(query_position + 1)
+		payload = payload.left(query_position)
+	var at_position := payload.rfind("@")
+	if at_position <= 0:
+		return {}
+	var password := payload.left(at_position).uri_decode()
+	var server_part := payload.substr(at_position + 1)
+	var server := ""
+	var port_text := ""
+	if server_part.begins_with("["):
+		var bracket_end := server_part.find("]")
+		if bracket_end < 0 or bracket_end + 2 > server_part.length():
+			return {}
+		server = server_part.substr(1, bracket_end - 1)
+		port_text = server_part.substr(bracket_end + 2)
+	else:
+		var colon_position := server_part.rfind(":")
+		if colon_position <= 0:
+			return {}
+		server = server_part.left(colon_position).uri_decode()
+		port_text = server_part.substr(colon_position + 1)
+	if not port_text.is_valid_int():
+		return {}
+	var port := int(port_text)
+	if port <= 0 or port > 65535:
+		return {}
+	var params := _uri_query_parameters(query)
+	var node := {
+		"name": fragment if not fragment.is_empty() else "%s-hy2" % server,
+		"server": server,
+		"port": port,
+		"password": password,
+		"skip_cert_verify": _query_bool(params, ["insecure", "allowinsecure", "skip-cert-verify"])
+	}
+	for mapping in [
+		["sni", ["sni", "servername", "peer"]],
+		["ports", ["mport", "ports"]],
+		["hop_interval", ["hop-interval", "hopinterval"]],
+		["obfs", ["obfs"]],
+		["obfs_password", ["obfs-password", "obfspassword"]],
+		["up", ["up"]],
+		["down", ["down"]],
+		["fingerprint", ["fingerprint"]],
+		["alpn", ["alpn"]]
+	]:
+		var value := _first_query_value(params, mapping[1])
+		if not value.is_empty():
+			node[mapping[0]] = value
+	return node
+
+func _uri_query_parameters(query: String) -> Dictionary:
+	var params := {}
+	for item in query.split("&", false):
+		var separator := item.find("=")
+		var key := (item.left(separator) if separator >= 0 else item).uri_decode().to_lower()
+		var value := (item.substr(separator + 1) if separator >= 0 else "").uri_decode()
+		params[key] = value
+	return params
+
+func _first_query_value(params: Dictionary, keys: Array) -> String:
+	for key_variant in keys:
+		var key := str(key_variant).to_lower()
+		if params.has(key):
+			return str(params[key])
+	return ""
+
+func _query_bool(params: Dictionary, keys: Array) -> bool:
+	for key_variant in keys:
+		var key := str(key_variant).to_lower()
+		if params.has(key) and str(params[key]).to_lower() in ["1", "true", "yes", "on"]:
+			return true
+	return false
+
+func _hysteria2_provider_yaml(nodes: Array[Dictionary], _entry_id: String) -> String:
+	var yaml := "proxies:\n"
+	var used_names := {}
+	for node in nodes:
+		var node_name := str(node.get("name", "Hysteria2"))
+		var unique_name := node_name
+		var suffix := 2
+		while used_names.has(unique_name):
+			unique_name = "%s (%d)" % [node_name, suffix]
+			suffix += 1
+		used_names[unique_name] = true
+		yaml += "  - name: %s\n" % _yaml_quote(unique_name)
+		yaml += "    type: hysteria2\n"
+		yaml += "    server: %s\n" % _yaml_quote(str(node.get("server", "")))
+		yaml += "    port: %d\n" % int(node.get("port", 0))
+		yaml += "    password: %s\n" % _yaml_quote(str(node.get("password", "")))
+		yaml += "    skip-cert-verify: %s\n" % str(bool(node.get("skip_cert_verify", false))).to_lower()
+		for field in ["sni", "ports", "hop_interval", "obfs", "obfs_password", "up", "down", "fingerprint"]:
+			if not node.has(field):
+				continue
+			var yaml_field := str(field).replace("_", "-")
+			yaml += "    %s: %s\n" % [yaml_field, _yaml_quote(str(node[field]))]
+		if node.has("alpn"):
+			yaml += "    alpn:\n"
+			for alpn_item in str(node["alpn"]).split(",", false):
+				yaml += "      - %s\n" % _yaml_quote(alpn_item.strip_edges())
+	return yaml
+
+func _yaml_quote(value: String) -> String:
+	return "'%s'" % value.replace("'", "''")
 
 func _looks_like_base64(value: String) -> bool:
 	var expression := RegEx.new()
@@ -556,20 +710,23 @@ func delete_subscription(entry_id: String) -> bool:
 		_restart_for_profile_change()
 	return true
 
-func _save_subscription(entry_id: String, display_name: String, kind: String, yaml: String, provider_file := "") -> bool:
+func _save_subscription(entry_id: String, display_name: String, kind: String, yaml: String, provider_file := "", extra := {}) -> bool:
 	DirAccess.make_dir_recursive_absolute(subscription_library_dir())
 	var config_file := "%s.yaml" % entry_id
 	if not _write_text_atomic(subscription_library_dir().path_join(config_file), yaml):
 		event_logged.emit("无法保存订阅档案。")
 		return false
-	_subscriptions.append({
+	var entry := {
 		"id": entry_id,
 		"name": display_name,
 		"type": kind,
 		"config_file": config_file,
 		"provider_file": provider_file,
 		"created_at": int(Time.get_unix_time_from_system())
-	})
+	}
+	for key in extra:
+		entry[key] = extra[key]
+	_subscriptions.append(entry)
 	if not _save_subscription_index():
 		_subscriptions.pop_back()
 		DirAccess.remove_absolute(subscription_library_dir().path_join(config_file))
@@ -649,9 +806,12 @@ func _load_subscription_library() -> void:
 			if item is Dictionary and not str(item.get("id", "")).is_empty():
 				_subscriptions.append(item)
 	_active_subscription_id = str(parsed.get("active_id", ""))
-	for entry_variant in _subscriptions:
+	for index in _subscriptions.size():
+		var entry_variant: Variant = _subscriptions[index]
 		if entry_variant is Dictionary:
-			_repair_v2_subscription_yaml(entry_variant)
+			var repaired_entry: Dictionary = entry_variant
+			_repair_v2_subscription_yaml(repaired_entry)
+			_subscriptions[index] = repaired_entry
 	var active_index := _subscription_index(_active_subscription_id)
 	if active_index >= 0:
 		var active_entry: Dictionary = _subscriptions[active_index]
@@ -666,14 +826,36 @@ func _repair_v2_subscription_yaml(entry: Dictionary) -> void:
 	if not FileAccess.file_exists(config_path):
 		return
 	var provider_file := str(entry.get("provider_file", ""))
-	if provider_file.is_empty():
+	var hy2_provider_file := str(entry.get("hy2_provider_file", ""))
+	if provider_file.is_empty() and hy2_provider_file.is_empty():
 		return
 	var legacy_provider_path := subscription_library_dir().path_join(provider_file)
 	var provider_path := subscription_provider_dir().path_join(provider_file)
 	if not provider_file.is_empty() and FileAccess.file_exists(legacy_provider_path) and not FileAccess.file_exists(provider_path):
 		_write_text_atomic(provider_path, FileAccess.get_file_as_string(legacy_provider_path))
 		DirAccess.remove_absolute(legacy_provider_path)
-	var repaired := _v2_profile_yaml(provider_file)
+	if hy2_provider_file.is_empty() and FileAccess.file_exists(provider_path):
+		var lines: Array[String] = []
+		for line_variant in FileAccess.get_file_as_string(provider_path).replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+			var line := str(line_variant).strip_edges()
+			if not line.is_empty():
+				lines.append(line)
+		var normalized := _normalize_v2_provider_lines(lines, str(entry.get("id", "")))
+		var regular_lines: Array[String] = normalized.get("regular_lines", [])
+		var hy2_yaml := str(normalized.get("hy2_yaml", ""))
+		if not hy2_yaml.is_empty():
+			hy2_provider_file = "%s-hy2.yaml" % str(entry.get("id", ""))
+			if _write_text_atomic(subscription_provider_dir().path_join(hy2_provider_file), hy2_yaml):
+				entry["hy2_provider_file"] = hy2_provider_file
+				if regular_lines.is_empty():
+					DirAccess.remove_absolute(provider_path)
+					provider_file = ""
+					entry["provider_file"] = ""
+				else:
+					_write_text_atomic(provider_path, "\n".join(regular_lines) + "\n")
+				_save_subscription_index()
+				event_logged.emit("已自动转换旧版 Hysteria2 分享链接。")
+	var repaired := _v2_profile_yaml(provider_file, hy2_provider_file)
 	if not _write_text_atomic(config_path, repaired):
 		return
 	if str(entry.get("id", "")) == _active_subscription_id:
@@ -706,6 +888,8 @@ func _migrate_legacy_active_profile() -> void:
 		current_profile_name = display_name
 		_write_profile(yaml)
 		_save_subscription_index()
+		if kind == "v2":
+			_repair_v2_subscription_yaml(_subscriptions.back())
 
 func _delete_subscription_files(entry: Dictionary) -> void:
 	var config_file := str(entry.get("config_file", ""))
@@ -714,10 +898,12 @@ func _delete_subscription_files(entry: Dictionary) -> void:
 		if FileAccess.file_exists(config_path):
 			DirAccess.remove_absolute(config_path)
 	var provider_file := str(entry.get("provider_file", ""))
-	if not provider_file.is_empty():
-		for provider_path in [subscription_provider_dir().path_join(provider_file), subscription_library_dir().path_join(provider_file)]:
-			if FileAccess.file_exists(provider_path):
-				DirAccess.remove_absolute(provider_path)
+	var provider_files := [provider_file, str(entry.get("hy2_provider_file", ""))]
+	for stored_provider_file in provider_files:
+		if not stored_provider_file.is_empty():
+			for provider_path in [subscription_provider_dir().path_join(stored_provider_file), subscription_library_dir().path_join(stored_provider_file)]:
+				if FileAccess.file_exists(provider_path):
+					DirAccess.remove_absolute(provider_path)
 
 func _write_text_atomic(path: String, content: String) -> bool:
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())

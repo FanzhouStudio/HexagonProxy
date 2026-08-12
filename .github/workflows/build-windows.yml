@@ -43,6 +43,7 @@ jobs:
         shell: pwsh
         run: |
           & ".godot-bin\Godot_v4.7-stable_win64.exe" --headless --path . --script res://tests/test_runner.gd
+          & ".godot-bin\Godot_v4.7-stable_win64.exe" --headless --path . --script res://tests/test_hysteria2_conversion.gd
 
       - name: Export
         shell: pwsh
@@ -57,7 +58,7 @@ jobs:
           $payload = Join-Path $packageRoot "payload"
           $temporaryInstaller = Join-Path $packageRoot "HexagonProxySetup.exe"
           New-Item -ItemType Directory -Force -Path dist, $payload | Out-Null
-          Copy-Item "build\六角代理.exe" "dist\六角代理.exe" -Force
+          Copy-Item "build\六角代理.exe" "dist\HexagonProxy.exe" -Force
           Copy-Item "build\六角代理.exe" (Join-Path $payload "HexagonProxy.exe") -Force
           Copy-Item LICENSE, THIRD_PARTY_NOTICES.md, installer\install.ps1, installer\uninstall.ps1 $payload -Force
           Copy-Item "third_party\Mihomo-LICENSE.txt" $payload -Force
@@ -77,13 +78,13 @@ jobs:
             if ($currentLength -gt 0 -and $currentLength -eq $lastLength) { $stableChecks++ } else { $stableChecks = 0; $lastLength = $currentLength }
           }
           if (-not (Test-Path $temporaryInstaller) -or $stableChecks -lt 3) { throw "Installer package was not created" }
-          Move-Item $temporaryInstaller "dist\六角代理安装包.exe" -Force
+          Move-Item $temporaryInstaller "dist\HexagonProxySetup.exe" -Force
           Get-ChildItem "dist\*.exe" | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash + " *" + (Split-Path $_.Path -Leaf) } | Set-Content "dist\SHA256SUMS.txt" -Encoding UTF8
 
       - uses: actions/upload-artifact@v4
         with:
           name: hexagon-proxy-windows-x64
           path: |
-            dist/六角代理.exe
-            dist/六角代理安装包.exe
+            dist/HexagonProxy.exe
+            dist/HexagonProxySetup.exe
             dist/SHA256SUMS.txt

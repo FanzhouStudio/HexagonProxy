@@ -26,7 +26,7 @@ rules:
 	if not _write_file(profile_dir.path_join("active.yaml"), legacy_yaml):
 		_fail("无法准备旧 active.yaml", 2)
 		return
-	if not _write_file(provider_dir.path_join("hexagon-v2.txt"), "hysteria2://password@127.0.0.1:24443?sni=example.com#Migration\n"):
+	if not _write_file(provider_dir.path_join("hexagon-v2.txt"), "vless://123e4567-e89b-12d3-a456-426614174000@127.0.0.1:443?encryption=none&security=reality&sni=example.com&pbk=test&type=tcp#VLESS-Migration\nhysteria2://password@127.0.0.1:24443?sni=example.com#HY2-Migration\n"):
 		_fail("无法准备旧 V2 provider", 3)
 		return
 	var controller: CoreController = CoreControllerScript.new()
@@ -43,6 +43,14 @@ rules:
 	var provider_file := str(entries[0].get("provider_file", ""))
 	if provider_file.is_empty() or not FileAccess.file_exists(controller.subscription_provider_dir().path_join(provider_file)):
 		_fail("迁移后的 V2 provider 文件不存在", 6)
+		return
+	var hy2_provider_file := str(entries[0].get("hy2_provider_file", ""))
+	if hy2_provider_file.is_empty() or not FileAccess.file_exists(controller.subscription_provider_dir().path_join(hy2_provider_file)):
+		_fail("旧 HY2 URI 没有自动迁移为 YAML provider", 7)
+		return
+	var hy2_yaml := FileAccess.get_file_as_string(controller.subscription_provider_dir().path_join(hy2_provider_file))
+	if not hy2_yaml.contains("type: hysteria2") or not migrated_yaml.contains("hexagon-v2-hy2"):
+		_fail("迁移后的活动配置没有引用 HY2 YAML provider", 8)
 		return
 	print("PASS: 旧 active.yaml 与 V2 provider 自动迁移")
 	quit(0)

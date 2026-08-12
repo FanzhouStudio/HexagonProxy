@@ -9,10 +9,8 @@ $distDir = Join-Path $projectRoot "dist"
 $buildDir = Join-Path $projectRoot "build"
 $packagingDir = Join-Path ([System.IO.Path]::GetTempPath()) ("hexagon_proxy_iexpress_" + $PID)
 $stagingDir = Join-Path $packagingDir "payload"
-$appName = -join [char[]](0x516D, 0x89D2, 0x4EE3, 0x7406)
-$installerSuffix = -join [char[]](0x5B89, 0x88C5, 0x5305)
-$portablePath = Join-Path $distDir ($appName + ".exe")
-$installerPath = Join-Path $distDir ($appName + $installerSuffix + ".exe")
+$portablePath = Join-Path $distDir "HexagonProxy.exe"
+$installerPath = Join-Path $distDir "HexagonProxySetup.exe"
 $corePath = Join-Path $projectRoot "bin\mihomo.exe"
 $templatePath = Join-Path $projectRoot "installer\package.sed"
 $generatedSedPath = Join-Path $packagingDir "package.generated.sed"
@@ -27,13 +25,38 @@ if (-not (Test-Path -LiteralPath $corePath)) {
 
 New-Item -ItemType Directory -Force -Path $distDir, $buildDir, $stagingDir | Out-Null
 
+function Invoke-IsolatedGodotTest {
+    param(
+        [string]$Name,
+        [string]$ScriptPath,
+        [string]$FailureMessage
+    )
+
+    $testRoot = Join-Path $packagingDir ("test_data_" + $Name)
+    $testRoaming = Join-Path $testRoot "Roaming"
+    $testLocal = Join-Path $testRoot "Local"
+    New-Item -ItemType Directory -Force -Path $testRoaming, $testLocal | Out-Null
+
+    $originalAppData = $env:APPDATA
+    $originalLocalAppData = $env:LOCALAPPDATA
+    $exitCode = 1
+    try {
+        $env:APPDATA = $testRoaming
+        $env:LOCALAPPDATA = $testLocal
+        & $GodotPath --headless --path $projectRoot --script $ScriptPath
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $env:APPDATA = $originalAppData
+        $env:LOCALAPPDATA = $originalLocalAppData
+    }
+    if ($exitCode -ne 0) { throw "$FailureMessage with exit code $exitCode" }
+}
+
 Write-Host "[1/4] Running automated tests"
-& $GodotPath --headless --path $projectRoot --script res://tests/test_runner.gd
-if ($LASTEXITCODE -ne 0) { throw "Base tests failed with exit code $LASTEXITCODE" }
-& $GodotPath --headless --path $projectRoot --script res://tests/test_large_subscription_ui.gd
-if ($LASTEXITCODE -ne 0) { throw "Large subscription test failed with exit code $LASTEXITCODE" }
-& $GodotPath --headless --path $projectRoot --script res://tests/test_close_behavior.gd
-if ($LASTEXITCODE -ne 0) { throw "Close behavior test failed with exit code $LASTEXITCODE" }
+Invoke-IsolatedGodotTest "base" "res://tests/test_runner.gd" "Base tests failed"
+Invoke-IsolatedGodotTest "large_subscription" "res://tests/test_large_subscription_ui.gd" "Large subscription test failed"
+Invoke-IsolatedGodotTest "close_behavior" "res://tests/test_close_behavior.gd" "Close behavior test failed"
+Invoke-IsolatedGodotTest "hysteria2" "res://tests/test_hysteria2_conversion.gd" "Hysteria2 conversion test failed"
 
 Write-Host "[2/4] Exporting portable application"
 Remove-Item -LiteralPath $portablePath -Force -ErrorAction SilentlyContinue
