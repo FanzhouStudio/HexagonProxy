@@ -1,3 +1,4 @@
+Q群：1102815471
 <p align="center">
   <img src="assets/app_icon.png" width="96" alt="六角代理图标">
 </p>
