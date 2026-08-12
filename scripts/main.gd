@@ -57,7 +57,6 @@ var core_progress: ProgressBar
 var core_progress_label: Label
 var mode_buttons := {}
 var desktop_pet_toggle: CheckButton
-var close_to_tray_toggle: CheckButton
 var autostart_toggle: CheckButton
 var desktop_pet: Node
 var tray_indicator: StatusIndicator
@@ -72,9 +71,10 @@ var previous_upload := 0.0
 var previous_sample_msec := 0
 var _enable_proxy_when_online := false
 var _refresh_tick := 0
-var _close_to_tray := true
 var _desktop_pet_enabled := true
 var _quitting := false
+var _close_prompt: Control
+var _main_hidden_to_tray := false
 var _current_node_name := ""
 var _current_page_name := ""
 var _node_rebuild_generation := 0
@@ -612,14 +612,9 @@ func _build_settings_page() -> Control:
 	var tray_words := VBoxContainer.new()
 	tray_words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tray_row.add_child(tray_words)
-	tray_words.add_child(_label("关闭时驻留托盘", 13, TEXT))
-	tray_words.add_child(_label("关闭主窗口后代理与桌宠继续运行", 10, MUTED))
-	close_to_tray_toggle = CheckButton.new()
-	close_to_tray_toggle.text = "启用"
-	_apply_crystal_toggle_theme(close_to_tray_toggle)
-	close_to_tray_toggle.set_pressed_no_signal(_close_to_tray)
-	close_to_tray_toggle.toggled.connect(_on_close_to_tray_toggled)
-	tray_row.add_child(close_to_tray_toggle)
+	tray_words.add_child(_label("关闭主窗口", 13, TEXT))
+	tray_words.add_child(_label("点击 X 时选择最小化到托盘或直接退出", 10, MUTED))
+	tray_row.add_child(_label("每次询问", 12, GREEN))
 	var pet_row := HBoxContainer.new()
 	behavior_column.add_child(pet_row)
 	var pet_words := VBoxContainer.new()
@@ -1065,11 +1060,9 @@ func _build_resident_features() -> void:
 
 func _load_app_settings() -> void:
 	app_settings.load("user://settings.cfg")
-	_close_to_tray = bool(app_settings.get_value("resident", "close_to_tray", true))
 	_desktop_pet_enabled = bool(app_settings.get_value("desktop_pet", "visible", true))
 
 func _save_app_settings() -> void:
-	app_settings.set_value("resident", "close_to_tray", _close_to_tray)
 	app_settings.set_value("desktop_pet", "visible", _desktop_pet_enabled)
 	if is_instance_valid(desktop_pet):
 		var pet_position: Vector2i = desktop_pet.get_pet_position()
@@ -1080,21 +1073,121 @@ func _save_app_settings() -> void:
 func _on_main_window_close_requested() -> void:
 	if _quitting:
 		return
-	if _close_to_tray and is_instance_valid(tray_indicator):
-		get_window().hide()
-		_append_log("主窗口已隐藏到托盘。")
-	else:
-		_quit_application()
+	if is_instance_valid(_close_prompt):
+		return
+	_show_close_prompt()
+
+func _show_close_prompt() -> void:
+	var overlay := Control.new()
+	overlay.name = "ClosePrompt"
+	overlay.z_index = 110
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	_close_prompt = overlay
+	var veil := ColorRect.new()
+	veil.color = Color("0a354566")
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(veil)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var card := _panel(Color("f6fffff8"), Color("bfffffff"), 22)
+	card.custom_minimum_size = Vector2(590, 250)
+	center.add_child(card)
+	var margin := _margin(30, 26, 30, 24)
+	card.add_child(margin)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 14)
+	margin.add_child(column)
+	column.add_child(_label("关闭六角代理", 21, TEXT))
+	var message := _label("要让六角代理继续在后台守护网络吗？\n最小化到托盘后，主窗口和任务栏图标都会收起；直接退出会关闭系统代理并停止本应用启动的内核。", 13, MUTED)
+	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	message.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(message)
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_END
+	actions.add_theme_constant_override("separation", 10)
+	column.add_child(actions)
+	var cancel_button := _button("取消", Color("e3f3f3e8"), TEXT)
+	cancel_button.custom_minimum_size.x = 82
+	cancel_button.pressed.connect(_dismiss_close_prompt)
+	var cancel_shortcut := Shortcut.new()
+	var escape_event := InputEventKey.new()
+	escape_event.keycode = KEY_ESCAPE
+	cancel_shortcut.events = [escape_event]
+	cancel_button.shortcut = cancel_shortcut
+	actions.add_child(cancel_button)
+	var tray_button := _button("最小化到托盘", Color("d8f4eee8"), GREEN)
+	tray_button.custom_minimum_size.x = 142
+	tray_button.add_theme_color_override("font_focus_color", GREEN)
+	tray_button.add_theme_stylebox_override("focus", _style(Color("ecfff8f4"), GREEN, 12, 2))
+	tray_button.pressed.connect(_hide_main_to_tray)
+	actions.add_child(tray_button)
+	var exit_button := _button("直接退出", Color("ffe3e8ef"), RED)
+	exit_button.custom_minimum_size.x = 104
+	exit_button.add_theme_color_override("font_hover_color", RED)
+	exit_button.add_theme_color_override("font_pressed_color", RED)
+	exit_button.add_theme_stylebox_override("hover", _style(Color("ffd4ddef"), RED, 12, 2))
+	exit_button.pressed.connect(_quit_application)
+	actions.add_child(exit_button)
+	tray_button.grab_focus()
+
+func _dismiss_close_prompt() -> void:
+	if is_instance_valid(_close_prompt):
+		_close_prompt.queue_free()
+	_close_prompt = null
+
+func _hide_main_to_tray() -> void:
+	_dismiss_close_prompt()
+	if _main_hidden_to_tray:
+		return
+	_main_hidden_to_tray = true
+	_set_main_window_visible(false)
+	_append_log("主窗口已最小化到托盘。")
 
 func _show_main_window() -> void:
+	_main_hidden_to_tray = false
 	var main_window := get_window()
-	main_window.show()
-	if main_window.mode == Window.MODE_MINIMIZED:
+	if OS.get_name() == "Windows":
+		_set_main_window_visible(true)
+	else:
 		main_window.mode = Window.MODE_WINDOWED
-	main_window.grab_focus()
+		main_window.grab_focus()
+
+func _set_main_window_visible(visible: bool) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	if OS.get_name() != "Windows":
+		get_window().mode = Window.MODE_WINDOWED if visible else Window.MODE_MINIMIZED
+		return
+	var helper_path := _window_helper_path()
+	if not FileAccess.file_exists(helper_path):
+		_install_window_helper()
+	if not FileAccess.file_exists(helper_path):
+		_append_log("无法加载窗口助手，请检查运行目录权限。")
+		return
+	OS.create_process("powershell.exe", PackedStringArray([
+		"-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+		"-File", helper_path, "show" if visible else "hide", str(OS.get_process_id()), "六角代理"
+	]), false)
+
+func _window_helper_path() -> String:
+	return controller.runtime_dir().path_join("windows_window_helper.ps1")
+
+func _install_window_helper() -> void:
+	var source := FileAccess.open("res://scripts/windows_window_helper.ps1", FileAccess.READ)
+	if source == null:
+		return
+	var target := FileAccess.open(_window_helper_path(), FileAccess.WRITE)
+	if target != null:
+		target.store_buffer(source.get_buffer(source.get_length()))
+		target.close()
+	source.close()
 
 func _start_in_tray() -> void:
-	get_window().hide()
+	_hide_main_to_tray()
 	_enable_proxy_when_online = true
 	controller.start_core()
 
@@ -1112,10 +1205,6 @@ func _on_tray_menu_pressed(id: int) -> void:
 			controller.set_autostart(not controller.is_autostart_enabled())
 		TRAY_EXIT:
 			_quit_application()
-
-func _on_close_to_tray_toggled(enabled: bool) -> void:
-	_close_to_tray = enabled
-	_save_app_settings()
 
 func _on_desktop_pet_toggled(enabled: bool) -> void:
 	_set_desktop_pet_visible(enabled)

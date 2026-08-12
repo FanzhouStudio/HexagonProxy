@@ -29,6 +29,7 @@ func create_pet(initial_position: Vector2i, initially_visible: bool) -> void:
 	pet_window.transparent_bg = true
 	pet_window.borderless = true
 	pet_window.always_on_top = true
+	pet_window.unfocusable = true
 	pet_window.unresizable = true
 	pet_window.visible = false
 	pet_window.force_native = true

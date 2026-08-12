@@ -32,6 +32,8 @@ Write-Host "[1/4] Running automated tests"
 if ($LASTEXITCODE -ne 0) { throw "Base tests failed with exit code $LASTEXITCODE" }
 & $GodotPath --headless --path $projectRoot --script res://tests/test_large_subscription_ui.gd
 if ($LASTEXITCODE -ne 0) { throw "Large subscription test failed with exit code $LASTEXITCODE" }
+& $GodotPath --headless --path $projectRoot --script res://tests/test_close_behavior.gd
+if ($LASTEXITCODE -ne 0) { throw "Close behavior test failed with exit code $LASTEXITCODE" }
 
 Write-Host "[2/4] Exporting portable application"
 Remove-Item -LiteralPath $portablePath -Force -ErrorAction SilentlyContinue
