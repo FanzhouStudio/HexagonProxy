@@ -16,7 +16,7 @@ Q群：1102815471
   <img alt="Mihomo" src="https://img.shields.io/badge/Core-Mihomo-16866f">
   <img alt="License" src="https://img.shields.io/badge/License-Source--Available-c84d68">
 </p>
-
+无论你拿到的是 Clash/Mihomo 订阅，还是 VLESS、VMess、Trojan、SS、Hysteria2 等分享链接，粘贴后即可使用，无需在线转换，也无需更换客户端。
 六角代理把订阅、节点、系统代理和桌面宠物放进同一个浅色水晶界面。应用负责本地管理与交互，网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理。
 
 ## 下载
