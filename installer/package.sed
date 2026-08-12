@@ -26,7 +26,7 @@ SourceFiles=SourceFiles
 InstallPrompt=
 DisplayLicense=
 FinishMessage=
-TargetName=E:\GodotProject\HexagonProxyInstaller\HexagonProxy-Setup.exe
+TargetName=__TARGET_PATH__
 FriendlyName=Hexagon Proxy Setup
 AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1
 PostInstallCmd=<None>
@@ -38,7 +38,7 @@ FILE4="install.ps1"
 FILE5="uninstall.ps1"
 
 [SourceFiles]
-SourceFiles0=E:\GodotProject\HexagonProxyInstaller\
+SourceFiles0=__SOURCE_PATH__
 
 [SourceFiles0]
 %FILE0%=

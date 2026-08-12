@@ -50,7 +50,40 @@ jobs:
           New-Item -ItemType Directory -Force -Path build | Out-Null
           & ".godot-bin\Godot_v4.7-stable_win64.exe" --headless --path . --export-release "Windows Desktop" "build\六角代理.exe"
 
+      - name: Package release files
+        shell: pwsh
+        run: |
+          $packageRoot = Join-Path $env:RUNNER_TEMP "hexagon_proxy_iexpress"
+          $payload = Join-Path $packageRoot "payload"
+          $temporaryInstaller = Join-Path $packageRoot "HexagonProxySetup.exe"
+          New-Item -ItemType Directory -Force -Path dist, $payload | Out-Null
+          Copy-Item "build\六角代理.exe" "dist\六角代理.exe" -Force
+          Copy-Item "build\六角代理.exe" (Join-Path $payload "HexagonProxy.exe") -Force
+          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md, installer\install.ps1, installer\uninstall.ps1 $payload -Force
+          Copy-Item "third_party\Mihomo-LICENSE.txt" $payload -Force
+          $source = $payload.TrimEnd("\") + "\"
+          $sed = Get-Content "installer\package.sed" -Raw
+          $sed = $sed.Replace("__TARGET_PATH__", $temporaryInstaller).Replace("__SOURCE_PATH__", $source)
+          $generatedSed = Join-Path $packageRoot "package.generated.sed"
+          Set-Content $generatedSed $sed -Encoding Default
+          & "$env:SystemRoot\System32\iexpress.exe" /N $generatedSed
+          $deadline = [DateTime]::UtcNow.AddMinutes(3)
+          $lastLength = -1
+          $stableChecks = 0
+          while ([DateTime]::UtcNow -lt $deadline -and $stableChecks -lt 3) {
+            Start-Sleep -Seconds 1
+            if (-not (Test-Path $temporaryInstaller)) { continue }
+            $currentLength = (Get-Item $temporaryInstaller).Length
+            if ($currentLength -gt 0 -and $currentLength -eq $lastLength) { $stableChecks++ } else { $stableChecks = 0; $lastLength = $currentLength }
+          }
+          if (-not (Test-Path $temporaryInstaller) -or $stableChecks -lt 3) { throw "Installer package was not created" }
+          Move-Item $temporaryInstaller "dist\六角代理安装包.exe" -Force
+          Get-ChildItem "dist\*.exe" | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash + " *" + (Split-Path $_.Path -Leaf) } | Set-Content "dist\SHA256SUMS.txt" -Encoding UTF8
+
       - uses: actions/upload-artifact@v4
         with:
           name: hexagon-proxy-windows-x64
-          path: build/六角代理.exe
+          path: |
+            dist/六角代理.exe
+            dist/六角代理安装包.exe
+            dist/SHA256SUMS.txt
