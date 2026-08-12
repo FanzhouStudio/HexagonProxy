@@ -10,3 +10,5 @@
 - 许可证全文：`third_party/Mihomo-LICENSE.txt`
 
 Mihomo 不提供任何担保。接收者可依据 GPL-3.0 获取、研究、修改和再分发其对应源码。
+
+FanzhouStudio 针对六角代理原创代码提供的 AGPL-3.0 或商业授权均不会改变 Mihomo 的许可证，也不代表 FanzhouStudio 有权对 Mihomo 提供替代商业许可。分发包含 Mihomo 的安装包时，仍须独立履行 GPL-3.0 的相应义务。

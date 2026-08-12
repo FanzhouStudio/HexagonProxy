@@ -32,10 +32,12 @@ AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1
 PostInstallCmd=<None>
 FILE0="HexagonProxy.exe"
 FILE1="LICENSE"
-FILE2="THIRD_PARTY_NOTICES.md"
-FILE3="Mihomo-LICENSE.txt"
-FILE4="install.ps1"
-FILE5="uninstall.ps1"
+FILE2="LICENSING.md"
+FILE3="SOURCE.md"
+FILE4="THIRD_PARTY_NOTICES.md"
+FILE5="Mihomo-LICENSE.txt"
+FILE6="install.ps1"
+FILE7="uninstall.ps1"
 
 [SourceFiles]
 SourceFiles0=__SOURCE_PATH__
@@ -47,3 +49,5 @@ SourceFiles0=__SOURCE_PATH__
 %FILE3%=
 %FILE4%=
 %FILE5%=
+%FILE6%=
+%FILE7%=

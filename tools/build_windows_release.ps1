@@ -69,6 +69,8 @@ Write-Host "[3/4] Preparing installer payload"
 Get-ChildItem -LiteralPath $stagingDir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 Copy-Item -LiteralPath $portablePath -Destination (Join-Path $stagingDir "HexagonProxy.exe") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination $stagingDir -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSING.md") -Destination $stagingDir -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "SOURCE.md") -Destination $stagingDir -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $stagingDir -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "third_party\Mihomo-LICENSE.txt") -Destination $stagingDir -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "installer\install.ps1") -Destination $stagingDir -Force

@@ -12,6 +12,8 @@ Get-Process -ErrorAction SilentlyContinue | Where-Object {
 
 Copy-Item -LiteralPath (Join-Path $sourceRoot "HexagonProxy.exe") -Destination $appPath -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot "LICENSE") -Destination $installDir -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot "LICENSING.md") -Destination $installDir -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot "SOURCE.md") -Destination $installDir -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot "THIRD_PARTY_NOTICES.md") -Destination $installDir -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot "Mihomo-LICENSE.txt") -Destination $installDir -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot "uninstall.ps1") -Destination $installDir -Force

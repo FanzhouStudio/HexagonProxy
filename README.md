@@ -14,7 +14,7 @@ Q群：1102815471
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-3478b8">
   <img alt="Godot" src="https://img.shields.io/badge/Godot-4.7-478cbf">
   <img alt="Mihomo" src="https://img.shields.io/badge/Core-Mihomo-16866f">
-  <img alt="License" src="https://img.shields.io/badge/License-Source--Available-c84d68">
+  <img alt="License" src="https://img.shields.io/badge/License-AGPL--3.0--only-663399">
 </p>
 无论你拿到的是 Clash/Mihomo 订阅，还是 VLESS、VMess、Trojan、SS、Hysteria2 等分享链接，粘贴后即可使用，无需在线转换，也无需更换客户端。
 六角代理把订阅、节点、系统代理和桌面宠物放进同一个浅色水晶界面。应用负责本地管理与交互，网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理。
@@ -76,8 +76,14 @@ powershell -ExecutionPolicy Bypass -File tools/build_windows_release.ps1
 
 </details>
 
-## 许可与第三方组件
+## 开源许可与商业授权
 
-本项目以 **源码公开（Source-Available）** 方式提供，并非 OSI 开源许可证。未经 FanzhouStudio 书面许可，禁止商业使用、倒卖、捆绑销售、二次封装、换皮以及分发修改版或编译成品。完整条款见 [LICENSE](LICENSE)。
+六角代理的原创客户端代码及随附材料以 **GNU Affero General Public License v3.0 only（AGPL-3.0-only）** 开源。你可以免费使用、研究、修改和分发，也可以商业使用，但必须遵守 AGPL-3.0 的源码公开、相同许可证和通知保留等要求。许可范围见 [LICENSING.md](LICENSING.md)，完整条款见 [LICENSE](LICENSE)，源码获取说明见 [SOURCE.md](SOURCE.md)。
 
-Mihomo 是独立运行的第三方组件，继续适用 GNU GPL v3；其他第三方项目也保留各自的许可权利。详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+如果企业需要闭源集成、OEM/品牌定制、私有发行，或希望获得不受 AGPL-3.0 约束的其他权利，可以申请单独的商业授权。商业授权不是使用本开源版本的必要条件，详情见 [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)，联系邮箱：**494919080@qq.com**。
+
+“六角代理”“Hexagon Proxy”“FanzhouStudio”以及项目名称、Logo 和官方版本标识不因代码开源而自动授权。第三方版本不得冒充官方版本，详见 [TRADEMARK.md](TRADEMARK.md)。
+
+欢迎提交 Issue 和 Pull Request。提交代码前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CLA.md](CLA.md)；贡献者协议使项目能够在保持社区版本开源的同时，继续向企业提供单独的商业授权。
+
+Mihomo 是独立运行的第三方组件，继续适用 GNU GPL v3，且不属于 FanzhouStudio 可另行商业授权的代码。其他第三方项目也保留各自的许可权利，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
