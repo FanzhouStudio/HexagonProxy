@@ -1,0 +1,73 @@
+Hexagon Proxy Source-Available License 1.0
+
+Copyright (c) 2026 FanzhouStudio. All rights reserved.
+
+This license applies to the original source code, documentation, artwork, and
+other materials in this repository (collectively, the "Software"), except for
+third-party components that are identified in THIRD_PARTY_NOTICES.md or carry
+their own license notices.
+
+1. Limited permission
+
+You may view, download, run, and modify the Software solely for personal,
+non-commercial study, evaluation, security review, and contribution to the
+official project.
+
+You may link to the official repository and submit changes to the official
+project through its contribution process.
+
+2. Restrictions
+
+Unless you first obtain separate written permission from FanzhouStudio, you
+may not:
+
+a. use the Software, or any modified or derivative version of it, for any
+   commercial purpose or commercial advantage;
+b. sell, rent, sublicense, monetize, or charge for the Software or access to
+   it, whether by itself or as part of another product or service;
+c. distribute or make available compiled binaries, installers, modified
+   builds, derivative products, mirrors, repackaged versions, or rebranded
+   versions of the Software;
+d. bundle the Software with another application, device, subscription,
+   service, or distribution;
+e. remove or alter copyright, attribution, license, branding, or third-party
+   notices; or
+f. use the names "六角代理", "Hexagon Proxy", "FanzhouStudio", or the
+   project's characters, logos, and artwork to suggest endorsement or origin
+   of another product.
+
+For clarity, publishing a fork, distributing a modified build, or packaging
+the Software as another client requires prior written permission even when no
+fee is charged. Private local modifications for the purposes allowed in
+Section 1 are permitted.
+
+3. Third-party components
+
+Third-party software is not relicensed by this license. In particular, Mihomo
+is a separate program licensed under GNU GPL version 3. Recipients retain all
+rights granted by the applicable third-party licenses. See
+THIRD_PARTY_NOTICES.md and the files under third_party/.
+
+4. Commercial and redistribution permission
+
+Commercial use, redistribution, integration, or other rights outside this
+license may be available under a separate written agreement with
+FanzhouStudio.
+
+5. Termination
+
+Any breach of this license automatically terminates the permissions granted
+under Section 1. Upon termination, you must stop using and delete every copy
+of the Software in your possession or control, except where retention is
+required by law.
+
+6. No warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT
+PERMITTED BY LAW, THE COPYRIGHT HOLDER SHALL NOT BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY ARISING FROM OR RELATED TO THE SOFTWARE OR ITS USE.
+
+This is a source-available license, not an Open Source Initiative approved
+open-source license.

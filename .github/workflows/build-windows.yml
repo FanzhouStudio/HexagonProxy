@@ -1,0 +1,56 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot 4.7 and export templates
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_win64.exe.zip" -OutFile godot.zip
+          Invoke-WebRequest "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz" -OutFile templates.zip
+          Expand-Archive godot.zip -DestinationPath .godot-bin
+          Expand-Archive templates.zip -DestinationPath .godot-templates
+          $target = Join-Path $env:APPDATA "Godot\export_templates\4.7.stable"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item ".godot-templates\templates\*" $target -Recurse -Force
+
+      - name: Download Mihomo core
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -match '^mihomo-windows-amd64-v3-.*\.zip$' } | Select-Object -First 1
+          if (-not $asset) { throw "Windows x64 Mihomo release asset not found" }
+          Invoke-WebRequest $asset.browser_download_url -OutFile mihomo.zip
+          Expand-Archive mihomo.zip -DestinationPath .mihomo
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          $core = Get-ChildItem .mihomo -File -Filter "*.exe" | Select-Object -First 1
+          if (-not $core) { throw "Mihomo executable not found in release archive" }
+          Copy-Item $core.FullName "bin\mihomo.exe" -Force
+
+      - name: Test
+        shell: pwsh
+        run: |
+          & ".godot-bin\Godot_v4.7-stable_win64.exe" --headless --path . --script res://tests/test_runner.gd
+
+      - name: Export
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          & ".godot-bin\Godot_v4.7-stable_win64.exe" --headless --path . --export-release "Windows Desktop" "build\六角代理.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hexagon-proxy-windows-x64
+          path: build/六角代理.exe

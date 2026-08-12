@@ -1,0 +1,15 @@
+.godot/
+build/
+dist/
+build_tooling/
+bin/
+temp_appdata/
+export_templates/
+feature_profiles/
+script_templates/
+text_editor_themes/
+
+*.log
+*.tmp
+Thumbs.db
+.DS_Store
