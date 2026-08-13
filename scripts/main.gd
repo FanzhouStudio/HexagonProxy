@@ -273,7 +273,10 @@ func _build_connection_card() -> PanelContainer:
 		var button := _small_choice_button(item[1])
 		button.toggle_mode = true
 		button.button_group = group
-		button.pressed.connect(func() -> void: controller.set_mode(item[0]))
+		button.pressed.connect(func() -> void:
+			var group_name := str(_selected_group().get("name", "六角选择"))
+			controller.set_mode(item[0], group_name)
+		)
 		mode_row.add_child(button)
 		mode_buttons[item[0]] = button
 	mode_buttons["rule"].button_pressed = true
@@ -648,6 +651,8 @@ func _on_poll_timer() -> void:
 	if controller.online:
 		if _refresh_tick % 2 == 0:
 			controller.refresh_runtime()
+		if _refresh_tick % 5 == 0:
+			controller.poll_status()
 		if _refresh_tick % 10 == 0:
 			var group := _selected_group()
 			if not group.is_empty():
@@ -848,7 +853,12 @@ func _on_api_result(action: String, ok: bool, payload: Variant) -> void:
 		_group_delay_pending.clear()
 		_rebuild_nodes()
 		_update_desktop_pet()
-	elif action in ["select_proxy", "update_provider", "set_mode"]:
+	elif action == "select_proxy":
+		if mode_buttons["global"].button_pressed:
+			var group_name := str(_selected_group().get("name", "六角选择"))
+			controller.set_mode("global", group_name)
+		controller.refresh_runtime()
+	elif action in ["update_provider", "set_mode"]:
 		controller.refresh_runtime()
 
 func _apply_proxies(payload: Dictionary) -> void:
@@ -914,6 +924,8 @@ func _on_group_selected(index: int) -> void:
 	selected_group_index = index
 	var group := _selected_group()
 	_current_node_name = str(group.get("now", ""))
+	if mode_buttons["global"].button_pressed:
+		controller.set_mode("global", str(group.get("name", "")))
 	_rebuild_nodes()
 	_update_desktop_pet()
 

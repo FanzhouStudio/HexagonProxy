@@ -16,6 +16,7 @@ Copy-Item -LiteralPath (Join-Path $sourceRoot "LICENSING.md") -Destination $inst
 Copy-Item -LiteralPath (Join-Path $sourceRoot "SOURCE.md") -Destination $installDir -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot "THIRD_PARTY_NOTICES.md") -Destination $installDir -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot "Mihomo-LICENSE.txt") -Destination $installDir -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot "MetaRules-LICENSE.txt") -Destination $installDir -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot "uninstall.ps1") -Destination $installDir -Force
 
 $shell = New-Object -ComObject WScript.Shell

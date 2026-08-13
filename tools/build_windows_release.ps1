@@ -54,6 +54,8 @@ function Invoke-IsolatedGodotTest {
 
 Write-Host "[1/4] Running automated tests"
 Invoke-IsolatedGodotTest "base" "res://tests/test_runner.gd" "Base tests failed"
+Invoke-IsolatedGodotTest "core_stability" "res://tests/test_core_stability.gd" "Core stability tests failed"
+Invoke-IsolatedGodotTest "routing_rules" "res://tests/test_routing_rules.gd" "Routing rules tests failed"
 Invoke-IsolatedGodotTest "large_subscription" "res://tests/test_large_subscription_ui.gd" "Large subscription test failed"
 Invoke-IsolatedGodotTest "close_behavior" "res://tests/test_close_behavior.gd" "Close behavior test failed"
 Invoke-IsolatedGodotTest "hysteria2" "res://tests/test_hysteria2_conversion.gd" "Hysteria2 conversion test failed"
@@ -73,6 +75,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSING.md") -Destination $sta
 Copy-Item -LiteralPath (Join-Path $projectRoot "SOURCE.md") -Destination $stagingDir -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $stagingDir -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "third_party\Mihomo-LICENSE.txt") -Destination $stagingDir -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "third_party\meta-rules-dat\LICENSE") -Destination (Join-Path $stagingDir "MetaRules-LICENSE.txt") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "installer\install.ps1") -Destination $stagingDir -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "installer\uninstall.ps1") -Destination $stagingDir -Force
 

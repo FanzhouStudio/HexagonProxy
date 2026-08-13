@@ -36,8 +36,9 @@ FILE2="LICENSING.md"
 FILE3="SOURCE.md"
 FILE4="THIRD_PARTY_NOTICES.md"
 FILE5="Mihomo-LICENSE.txt"
-FILE6="install.ps1"
-FILE7="uninstall.ps1"
+FILE6="MetaRules-LICENSE.txt"
+FILE7="install.ps1"
+FILE8="uninstall.ps1"
 
 [SourceFiles]
 SourceFiles0=__SOURCE_PATH__
@@ -51,3 +52,4 @@ SourceFiles0=__SOURCE_PATH__
 %FILE5%=
 %FILE6%=
 %FILE7%=
+%FILE8%=

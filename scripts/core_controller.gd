@@ -16,6 +16,38 @@ const CONTROLLER_HOST := "127.0.0.1"
 const CONTROLLER_PORT := 19090
 const MIXED_PORT := 7890
 const GITHUB_RELEASE_API := "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+const CORE_STARTUP_MAX_ATTEMPTS := 12
+const CORE_PROCESS_START_GRACE_MSEC := 1500
+const CORE_STABLE_RESET_MSEC := 60000
+const CORE_RECOVERY_DELAYS := [1.0, 3.0, 8.0]
+const GENERATED_ROUTING_RULES := """rules:
+  - DOMAIN,localhost,DIRECT
+  - DOMAIN-SUFFIX,localhost,DIRECT
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR6,::1/128,DIRECT,no-resolve
+  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
+  - IP-CIDR6,fe80::/10,DIRECT,no-resolve
+  - RULE-SET,hexagon-cn-domain,DIRECT
+  - RULE-SET,hexagon-cn-ip,DIRECT,no-resolve
+  - MATCH,六角选择
+"""
+const GENERATED_RULE_PROVIDERS := """rule-providers:
+  hexagon-cn-domain:
+    type: file
+    behavior: domain
+    format: mrs
+    path: ./rules/geosite-cn.mrs
+  hexagon-cn-ip:
+    type: file
+    behavior: ipcidr
+    format: mrs
+    path: ./rules/geoip-cn.mrs
+"""
 
 var core_pid := -1
 var online := false
@@ -43,11 +75,18 @@ var _core_cleanup_pid := -1
 var _core_cleanup_started_msec := 0
 var _start_after_cleanup := false
 var _shutting_down := false
+var _should_run := false
+var _recovery_pending := false
+var _recovery_attempts := 0
+var _online_since_msec := 0
+var _health_failures := 0
+var _core_started_msec := 0
 
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(runtime_dir())
 	DirAccess.make_dir_recursive_absolute(profile_dir())
 	_install_bundled_core()
+	_install_bundled_routing_rules()
 	_ensure_default_profile()
 	_load_subscription_library()
 	_migrate_legacy_active_profile()
@@ -59,6 +98,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_finish_system_proxy_process_if_ready()
 	_finish_core_cleanup_if_ready()
+	_monitor_core_process()
 
 func runtime_dir() -> String:
 	return ProjectSettings.globalize_path("user://runtime")
@@ -83,7 +123,7 @@ func core_path() -> String:
 
 func _install_bundled_core() -> void:
 	var destination := core_path()
-	if FileAccess.file_exists(destination):
+	if _is_valid_core_executable(destination):
 		return
 	var bundled := "res://bin/mihomo.exe"
 	if not FileAccess.file_exists(bundled):
@@ -98,26 +138,90 @@ func _install_bundled_core() -> void:
 	target.store_buffer(source.get_buffer(source.get_length()))
 	target.close()
 	source.close()
+	if FileAccess.file_exists(destination):
+		DirAccess.remove_absolute(destination)
 	if DirAccess.rename_absolute(temporary, destination) == OK:
 		event_logged.emit("已释放随客户端附带的 Mihomo 内核。")
 
-func has_core() -> bool:
-	return FileAccess.file_exists(core_path())
+func _is_valid_core_executable(path: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null or file.get_length() < 2:
+		return false
+	var signature := file.get_buffer(2)
+	file.close()
+	return signature.size() == 2 and signature[0] == 0x4d and signature[1] == 0x5a
 
-func start_core() -> void:
+func _install_bundled_routing_rules() -> void:
+	var destination_dir := runtime_dir().path_join("rules")
+	DirAccess.make_dir_recursive_absolute(destination_dir)
+	for file_name in ["geosite-cn.mrs", "geoip-cn.mrs"]:
+		var source_path := "res://third_party/meta-rules-dat/%s" % file_name
+		var source := FileAccess.open(source_path, FileAccess.READ)
+		if source == null:
+			continue
+		var target := FileAccess.open(destination_dir.path_join(file_name), FileAccess.WRITE)
+		if target != null:
+			target.store_buffer(source.get_buffer(source.get_length()))
+			target.close()
+		source.close()
+
+func has_core() -> bool:
+	return _is_valid_core_executable(core_path())
+
+func start_core(mark_desired := true) -> void:
+	if mark_desired:
+		_should_run = true
 	if online or starting:
 		return
 	if not has_core():
+		_should_run = false
 		status_changed.emit(false, "需要先下载 Mihomo 内核")
 		event_logged.emit("未找到 Mihomo 内核，请在设置页下载。")
 		return
 	_ensure_default_profile()
+	var validation := _validate_active_profile()
+	if not bool(validation.get("ok", false)):
+		_should_run = false
+		status_changed.emit(false, "配置校验失败，请检查订阅")
+		event_logged.emit(str(validation.get("message", "Mihomo 拒绝了当前配置。")))
+		return
 	if OS.get_name() == "Windows":
 		_start_core_cleanup()
 		return
 	_launch_core()
 
+func _validate_active_profile() -> Dictionary:
+	var output: Array = []
+	var exit_code := OS.execute(core_path(), PackedStringArray([
+		"-t", "-d", runtime_dir(), "-f", profile_path()
+	]), output, true, false)
+	if exit_code == 0:
+		return {"ok": true, "message": ""}
+	var detail := ""
+	if not output.is_empty():
+		detail = str(output.back()).strip_edges().replace("\r", " ").replace("\n", " ")
+		if detail.length() > 240:
+			detail = detail.left(240) + "…"
+	return {
+		"ok": false,
+		"message": "配置校验失败%s" % ("：%s" % detail if not detail.is_empty() else "。")
+	}
+
 func _launch_core() -> void:
+	var occupied_ports: Array[int] = []
+	for port in [MIXED_PORT, CONTROLLER_PORT]:
+		if not _tcp_port_is_available(port):
+			occupied_ports.append(port)
+	if not occupied_ports.is_empty():
+		_should_run = false
+		starting = false
+		var port_names := PackedStringArray()
+		for occupied_port in occupied_ports:
+			port_names.append(str(occupied_port))
+		var port_text := ", ".join(port_names)
+		status_changed.emit(false, "端口 %s 已被占用" % port_text)
+		event_logged.emit("无法启动 Mihomo：本机端口 %s 正在被其他程序使用。请先退出其他代理客户端。" % port_text)
+		return
 	_api_secret = Crypto.new().generate_random_bytes(24).hex_encode()
 	var args := PackedStringArray([
 		"-d", runtime_dir(),
@@ -128,19 +232,31 @@ func _launch_core() -> void:
 	core_pid = OS.create_process(core_path(), args, false)
 	if core_pid <= 0:
 		core_pid = -1
+		starting = false
 		status_changed.emit(false, "内核启动失败")
 		event_logged.emit("无法创建 Mihomo 进程。")
+		_schedule_core_recovery()
 		return
 	starting = true
+	_core_started_msec = Time.get_ticks_msec()
 	_startup_attempts = 0
 	status_changed.emit(false, "六角恐龙正在启动内核…")
 	event_logged.emit("Mihomo 已启动，PID %d。" % core_pid)
 	await get_tree().create_timer(0.45).timeout
 	poll_status()
 
+func _tcp_port_is_available(port: int) -> bool:
+	var server := TCPServer.new()
+	var result := server.listen(port, CONTROLLER_HOST)
+	server.stop()
+	return result == OK
+
 func stop_core(cancel_pending_restart := true) -> void:
 	if cancel_pending_restart:
 		_restart_generation += 1
+		_should_run = false
+		_recovery_pending = false
+		_recovery_attempts = 0
 	_cancel_api_requests()
 	_start_after_cleanup = false
 	if _core_cleanup_pid > 0:
@@ -152,6 +268,7 @@ func stop_core(cancel_pending_restart := true) -> void:
 	if core_pid > 0:
 		OS.kill(core_pid)
 	core_pid = -1
+	_core_started_msec = 0
 	starting = false
 	_startup_attempts = 0
 	_set_online(false, "代理已休息")
@@ -219,13 +336,8 @@ func poll_status() -> void:
 		starting = false
 		_set_online(false, "内核启动失败，请检查配置")
 		return
-	if core_pid > 0 and not OS.is_process_running(core_pid):
-		core_pid = -1
-		starting = false
-		if system_proxy_enabled:
-			set_system_proxy(false)
-		_set_online(false, "内核已退出，请检查配置")
-		event_logged.emit("Mihomo 进程意外退出，可能是配置格式无效。")
+	if _core_process_is_confirmed_dead():
+		_handle_unexpected_core_exit()
 		return
 	_poll_in_flight = true
 	_api_request("version", "/version", HTTPClient.METHOD_GET)
@@ -237,8 +349,65 @@ func refresh_runtime() -> void:
 	_api_request("connections", "/connections", HTTPClient.METHOD_GET)
 	_api_request("config", "/configs", HTTPClient.METHOD_GET)
 
-func set_mode(mode: String) -> void:
+func _monitor_core_process() -> void:
+	if _core_process_is_confirmed_dead():
+		_handle_unexpected_core_exit()
+		return
+	if online and _online_since_msec > 0 and Time.get_ticks_msec() - _online_since_msec >= CORE_STABLE_RESET_MSEC:
+		_recovery_attempts = 0
+		_online_since_msec = 0
+
+func _core_process_is_confirmed_dead() -> bool:
+	return core_pid > 0 \
+		and Time.get_ticks_msec() - _core_started_msec >= CORE_PROCESS_START_GRACE_MSEC \
+		and not OS.is_process_running(core_pid)
+
+func _handle_unexpected_core_exit() -> void:
+	if core_pid <= 0:
+		return
+	core_pid = -1
+	_core_started_msec = 0
+	starting = false
+	_online_since_msec = 0
+	_health_failures = 0
+	if system_proxy_enabled:
+		set_system_proxy(false)
+	_set_online(false, "内核意外退出")
+	event_logged.emit("检测到 Mihomo 进程意外退出。")
+	_schedule_core_recovery()
+
+func _schedule_core_recovery() -> void:
+	if _recovery_pending or not _should_run or _shutting_down:
+		return
+	if _recovery_attempts >= CORE_RECOVERY_DELAYS.size():
+		_should_run = false
+		status_changed.emit(false, "自动恢复失败，请检查配置或端口")
+		event_logged.emit("Mihomo 连续异常退出，已停止自动重试。")
+		return
+	_recovery_pending = true
+	var attempt := _recovery_attempts + 1
+	_recovery_attempts = attempt
+	var delay_seconds: float = CORE_RECOVERY_DELAYS[attempt - 1]
+	var generation := _restart_generation
+	status_changed.emit(false, "内核异常，%d 秒后自动恢复（%d/%d）" % [int(delay_seconds), attempt, CORE_RECOVERY_DELAYS.size()])
+	event_logged.emit("准备第 %d 次自动恢复 Mihomo。" % attempt)
+	await get_tree().create_timer(delay_seconds).timeout
+	_recovery_pending = false
+	if generation != _restart_generation or not _should_run or _shutting_down:
+		return
+	start_core(false)
+
+func set_mode(mode: String, group_name := "六角选择") -> void:
 	if mode not in ["rule", "global", "direct"]:
+		return
+	if mode == "global":
+		# Mihomo global mode bypasses `rules` and uses its synthetic GLOBAL
+		# selector. Resolve the app group's current concrete node first because
+		# GLOBAL accepts node names, not another selector group.
+		if group_name.is_empty():
+			event_logged.emit("全局模式找不到可用的策略组。")
+			return
+		_api_request("resolve_global_proxy", "/proxies/%s" % group_name.uri_encode(), HTTPClient.METHOD_GET)
 		return
 	_api_request("set_mode", "/configs", HTTPClient.METHOD_PATCH, JSON.stringify({"mode": mode}))
 
@@ -324,6 +493,7 @@ tcp-concurrent: true
 profile:
   store-selected: true
   store-fake-ip: true
+%s
 proxy-providers:
   hexagon-subscription:
     type: http
@@ -349,9 +519,7 @@ proxy-groups:
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 80
-rules:
-  - MATCH,六角选择
-""" % escaped
+%s""" % [GENERATED_RULE_PROVIDERS, escaped, GENERATED_ROUTING_RULES]
 	var entry_id := _new_subscription_id()
 	var host := cleaned.trim_prefix("https://").trim_prefix("http://").get_slice("/", 0).get_slice("?", 0)
 	var display_name := "HTTP 订阅" if host.is_empty() else "HTTP 订阅 · %s" % host
@@ -469,6 +637,7 @@ tcp-concurrent: true
 profile:
   store-selected: true
   store-fake-ip: true
+%s
 proxy-providers:
 %sproxy-groups:
   - name: 六角选择
@@ -480,9 +649,7 @@ proxy-providers:
 %s    url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 80
-rules:
-  - MATCH,六角选择
-""" % [provider_yaml, use_yaml, use_yaml]
+%s""" % [GENERATED_RULE_PROVIDERS, provider_yaml, use_yaml, use_yaml, GENERATED_ROUTING_RULES]
 
 func _normalize_v2_provider_lines(uri_lines: Array[String], entry_id: String) -> Dictionary:
 	var regular_lines: Array[String] = []
@@ -811,6 +978,7 @@ func _load_subscription_library() -> void:
 		if entry_variant is Dictionary:
 			var repaired_entry: Dictionary = entry_variant
 			_repair_v2_subscription_yaml(repaired_entry)
+			_upgrade_generated_routing_rules(repaired_entry)
 			_subscriptions[index] = repaired_entry
 	var active_index := _subscription_index(_active_subscription_id)
 	if active_index >= 0:
@@ -862,6 +1030,28 @@ func _repair_v2_subscription_yaml(entry: Dictionary) -> void:
 		_write_profile(repaired)
 	event_logged.emit("已自动修复旧版 V2 配置缩进。")
 
+func _upgrade_generated_routing_rules(entry: Dictionary) -> void:
+	if str(entry.get("type", "")) not in ["http", "v2"]:
+		return
+	var config_path := subscription_library_dir().path_join(str(entry.get("config_file", "")))
+	if not FileAccess.file_exists(config_path):
+		return
+	var yaml := FileAccess.get_file_as_string(config_path)
+	if yaml.contains("IP-CIDR,127.0.0.0/8,DIRECT") and yaml.contains("RULE-SET,hexagon-cn-ip,DIRECT"):
+		return
+	var proxy_marker := "\nproxy-providers:\n"
+	var proxy_position := yaml.find(proxy_marker)
+	var rules_marker := "\nrules:\n"
+	var rules_position := yaml.find(rules_marker)
+	if proxy_position < 0 or rules_position < 0:
+		return
+	var upgraded := yaml.left(proxy_position + 1) + GENERATED_RULE_PROVIDERS + yaml.substr(proxy_position + 1, rules_position - proxy_position) + GENERATED_ROUTING_RULES
+	if not _write_text_atomic(config_path, upgraded):
+		return
+	if str(entry.get("id", "")) == _active_subscription_id:
+		_write_profile(upgraded)
+	event_logged.emit("已升级旧配置的本地与国内直连规则。")
+
 func _migrate_legacy_active_profile() -> void:
 	if not _subscriptions.is_empty() or not FileAccess.file_exists(profile_path()):
 		return
@@ -890,6 +1080,8 @@ func _migrate_legacy_active_profile() -> void:
 		_save_subscription_index()
 		if kind == "v2":
 			_repair_v2_subscription_yaml(_subscriptions.back())
+		elif kind == "http":
+			_upgrade_generated_routing_rules(_subscriptions.back())
 
 func _delete_subscription_files(entry: Dictionary) -> void:
 	var config_file := str(entry.get("config_file", ""))
@@ -1019,6 +1211,10 @@ func _registry_string_value(output: String, marker: String) -> String:
 func download_latest_core() -> void:
 	if _download_request != null:
 		return
+	if online or starting or core_pid > 0:
+		download_progress.emit(-1.0, "请先断开代理，再更新 Mihomo 内核")
+		event_logged.emit("为避免替换正在运行的文件，内核更新已取消。")
+		return
 	download_progress.emit(0.02, "正在查询 Mihomo 最新版本…")
 	_download_request = HTTPRequest.new()
 	_download_request.timeout = 25.0
@@ -1109,12 +1305,33 @@ func _on_core_archive_received(result: int, response_code: int, _headers: Packed
 	if exe_bytes.size() < 2 or exe_bytes[0] != 0x4d or exe_bytes[1] != 0x5a:
 		_finish_download(false, "压缩包内没有 mihomo.exe")
 		return
-	var output := FileAccess.open(core_path(), FileAccess.WRITE)
+	var installing_path := core_path().get_basename() + ".installing.exe"
+	var output := FileAccess.open(installing_path, FileAccess.WRITE)
 	if output == null:
 		_finish_download(false, "无法写入内核目录")
 		return
 	output.store_buffer(exe_bytes)
 	output.close()
+	var version_output: Array = []
+	var version_exit_code := OS.execute(installing_path, PackedStringArray(["-v"]), version_output, true, false)
+	if version_exit_code != 0:
+		DirAccess.remove_absolute(installing_path)
+		_finish_download(false, "新内核无法运行，已保留原版本")
+		return
+	var backup_path := core_path().get_basename() + ".backup.exe"
+	if FileAccess.file_exists(backup_path):
+		DirAccess.remove_absolute(backup_path)
+	if FileAccess.file_exists(core_path()) and DirAccess.rename_absolute(core_path(), backup_path) != OK:
+		DirAccess.remove_absolute(installing_path)
+		_finish_download(false, "旧内核正在使用或无法替换")
+		return
+	if DirAccess.rename_absolute(installing_path, core_path()) != OK:
+		if FileAccess.file_exists(backup_path):
+			DirAccess.rename_absolute(backup_path, core_path())
+		_finish_download(false, "安装新内核失败，已恢复原版本")
+		return
+	if FileAccess.file_exists(backup_path):
+		DirAccess.remove_absolute(backup_path)
 	DirAccess.remove_absolute(_download_archive_path)
 	_download_archive_path = ""
 	_finish_download(true, "Mihomo 内核已就绪")
@@ -1155,23 +1372,41 @@ func _api_request(action: String, endpoint: String, method: int, body := "") -> 
 		if action == "version":
 			if ok:
 				_startup_attempts = 0
+				_health_failures = 0
 				_set_online(true, "守护中 · 连接安全")
 			elif starting:
 				_startup_attempts += 1
-				if _startup_attempts >= 12:
+				if _startup_attempts >= CORE_STARTUP_MAX_ATTEMPTS:
 					starting = false
 					if core_pid > 0:
 						OS.kill(core_pid)
-					core_pid = -1
-					_set_online(false, "内核启动失败，请检查配置")
 					event_logged.emit("等待控制接口超时，配置可能无效或端口被占用。")
+					_handle_unexpected_core_exit()
 				else:
 					await get_tree().create_timer(0.7).timeout
 					poll_status()
+			elif online:
+				_health_failures += 1
+				if _health_failures >= 3:
+					if core_pid > 0:
+						OS.kill(core_pid)
+					event_logged.emit("Mihomo 控制接口连续三次无响应。")
+					_handle_unexpected_core_exit()
 			else:
 				_set_online(false, "代理未连接")
 		if action == "set_mode" and ok:
 			event_logged.emit("代理模式已切换。")
+		if action == "resolve_global_proxy":
+			var selected_node := str(payload.get("now", "")) if ok and payload is Dictionary else ""
+			if selected_node.is_empty():
+				event_logged.emit("全局模式无法读取当前节点。")
+			else:
+				_api_request("select_global_proxy", "/proxies/GLOBAL", HTTPClient.METHOD_PUT, JSON.stringify({"name": selected_node}))
+		if action == "select_global_proxy":
+			if ok:
+				_api_request("set_mode", "/configs", HTTPClient.METHOD_PATCH, JSON.stringify({"mode": "global"}))
+			else:
+				event_logged.emit("全局模式无法绑定当前节点。")
 		if action == "select_proxy" and ok:
 			event_logged.emit("节点切换成功。")
 		if action == "update_provider":
@@ -1205,6 +1440,10 @@ func _set_online(value: bool, message: String) -> void:
 	online = value
 	if value:
 		starting = false
+		if not online or _online_since_msec <= 0:
+			_online_since_msec = Time.get_ticks_msec()
+	else:
+		_online_since_msec = 0
 	if changed or not message.is_empty():
 		status_changed.emit(value, message)
 	if changed and value:
@@ -1224,15 +1463,14 @@ log-level: info
 ipv6: false
 profile:
   store-selected: true
+%s
 proxies: []
 proxy-groups:
   - name: 六角选择
     type: select
     proxies:
       - DIRECT
-rules:
-  - MATCH,六角选择
-"""
+%s""" % [GENERATED_RULE_PROVIDERS, GENERATED_ROUTING_RULES]
 
 func _write_profile(content: String) -> bool:
 	DirAccess.make_dir_recursive_absolute(profile_dir())
