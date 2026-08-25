@@ -1,3 +1,5 @@
+
+
 Q群：1102815471
 <p align="center">
   <img src="assets/app_icon.png" width="96" alt="六角代理图标">
@@ -63,7 +65,7 @@ Q群：1102815471
 ### 环境
 
 - Windows 10/11 x64
-- Godot 4.7 stable
+- Godot 4.7 stable 及导出模板
 - 官方 Windows x64 `mihomo.exe`，放置于 `bin/mihomo.exe`
 
 使用 Godot 打开项目目录即可运行。生成两种发布产物时执行：
