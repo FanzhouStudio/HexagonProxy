@@ -1,8 +1,8 @@
-# 六角代理许可说明
+# HexagonProxy许可说明
 
 Copyright (c) 2026 FanzhouStudio.
 
-六角代理（Hexagon Proxy）是一款面向 Windows 的轻量 Mihomo 图形客户端。
+HexagonProxy（HexagonProxy）是一款面向 Windows 的轻量 Mihomo 图形客户端。
 
 本程序是自由软件：你可以根据自由软件基金会发布的 GNU Affero 通用公共许可证第 3 版的条款重新分发和/或修改它。
 

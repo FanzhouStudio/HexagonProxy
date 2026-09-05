@@ -1,5 +1,5 @@
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image
 import sys
 
 
@@ -18,11 +18,13 @@ if alpha_box is not None:
     source = source.crop(alpha_box)
 
 canvas = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
-draw = ImageDraw.Draw(canvas)
-draw.rounded_rectangle((8, 8, 248, 248), radius=46, fill=(8, 58, 78, 255), outline=(82, 211, 191, 255), width=8)
 
-source.thumbnail((214, 174), Image.Resampling.NEAREST)
-position = ((256 - source.width) // 2, (256 - source.height) // 2 + 8)
+# Keep the icon fully transparent outside the mascot and enlarge the pixel art
+# with an integer nearest-neighbour scale so its pixels stay crisp.
+max_width, max_height = 232, 208
+scale = max(1, min(max_width // source.width, max_height // source.height))
+source = source.resize((source.width * scale, source.height * scale), Image.Resampling.NEAREST)
+position = ((256 - source.width) // 2, (256 - source.height) // 2)
 canvas.alpha_composite(source, position)
 
 png_path = output_dir / "app_icon.png"

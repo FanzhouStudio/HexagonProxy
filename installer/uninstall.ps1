@@ -1,6 +1,7 @@
 $ErrorActionPreference = "SilentlyContinue"
 
-$displayName = -join [char[]](0x516D, 0x89D2, 0x4EE3, 0x7406)
+$displayName = "HexagonProxy"
+$legacyDisplayName = -join [char[]](0x516D, 0x89D2, 0x4EE3, 0x7406)
 $installDir = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Programs\HexagonProxy"))
 $expectedDir = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Programs\HexagonProxy"))
 if ($installDir -ne $expectedDir) {
@@ -8,9 +9,12 @@ if ($installDir -ne $expectedDir) {
 }
 
 $appPath = Join-Path $installDir "HexagonProxy.exe"
-$corePath = Join-Path $env:APPDATA ("Godot\app_userdata\" + $displayName + "\runtime\mihomo.exe")
+$corePaths = @(
+    (Join-Path $env:APPDATA ("Godot\app_userdata\" + $displayName + "\runtime\mihomo.exe")),
+    (Join-Path $env:APPDATA ("Godot\app_userdata\" + $legacyDisplayName + "\runtime\mihomo.exe"))
+)
 Get-Process -Name "mihomo" -ErrorAction SilentlyContinue | Where-Object {
-    try { $_.Path -eq $corePath } catch { $false }
+    try { $corePaths -contains $_.Path } catch { $false }
 } | Stop-Process -Force
 Get-Process | Where-Object {
     try { $_.Path -eq $appPath } catch { $false }
@@ -18,7 +22,9 @@ Get-Process | Where-Object {
 
 Remove-ItemProperty -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "HexagonProxy" -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath("Desktop")) ($displayName + ".lnk")) -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath("Desktop")) ($legacyDisplayName + ".lnk")) -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath("Programs")) $displayName) -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath("Programs")) $legacyDisplayName) -Recurse -Force -ErrorAction SilentlyContinue
 
 $cleanup = @"
 Start-Sleep -Seconds 2

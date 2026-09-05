@@ -1,6 +1,6 @@
-# 为六角代理做贡献
+# 为HexagonProxy做贡献
 
-感谢你帮助改进六角代理。你可以提交 Issue 讨论问题，也可以通过 Pull Request 提交代码、文档或资源修改。
+感谢你帮助改进HexagonProxy。你可以提交 Issue 讨论问题，也可以通过 Pull Request 提交代码、文档或资源修改。
 
 ## 提交前
 
@@ -16,4 +16,4 @@
 - 如果修改用户界面，请附上截图；如果修改功能，请补充或更新测试。
 - 在 Pull Request 模板中确认贡献者协议。不同意 CLA 时，请先通过 Issue 提出建议，不要提交受版权保护的实现。
 
-提交 Pull Request 不保证修改一定会被合并。被接受的贡献会作为六角代理的一部分按 AGPL-3.0-only 向公众提供，同时受 CLA 中的授权约束。
+提交 Pull Request 不保证修改一定会被合并。被接受的贡献会作为HexagonProxy的一部分按 AGPL-3.0-only 向公众提供，同时受 CLA 中的授权约束。

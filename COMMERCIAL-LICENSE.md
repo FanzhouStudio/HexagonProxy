@@ -1,10 +1,10 @@
-# 六角代理商业授权说明
+# HexagonProxy商业授权说明
 
-六角代理的社区版本依据 AGPL-3.0-only 免费提供，包括商业使用。只要你的使用、修改和分发方式符合 AGPL-3.0，就不需要购买商业授权。
+HexagonProxy的社区版本依据 AGPL-3.0-only 免费提供，包括商业使用。只要你的使用、修改和分发方式符合 AGPL-3.0，就不需要购买商业授权。
 
 如果你的业务无法或不希望遵守 AGPL-3.0，可以联系 FanzhouStudio 洽谈单独的商业许可，例如：
 
-- 将六角代理原创代码集成到闭源产品或服务；
+- 将HexagonProxy原创代码集成到闭源产品或服务；
 - 以 OEM、白标或自有品牌方式发行；
 - 私有分发修改版且不按 AGPL-3.0 提供对应源码；
 - 需要定制开发、批量部署、维护支持或其他书面授权。
@@ -15,4 +15,4 @@
 
 ## 第三方组件
 
-商业许可只能覆盖 FanzhouStudio 有权另行授权的原创代码和材料。Mihomo 等第三方组件继续适用各自的许可证，不能通过六角代理的商业许可变更或免除。详情见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+商业许可只能覆盖 FanzhouStudio 有权另行授权的原创代码和材料。Mihomo 等第三方组件继续适用各自的许可证，不能通过HexagonProxy的商业许可变更或免除。详情见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

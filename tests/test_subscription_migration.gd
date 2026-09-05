@@ -1,6 +1,6 @@
 extends SceneTree
 
-const CoreControllerScript = preload("res://scripts/core_controller.gd")
+const SubscriptionServiceScript = preload("res://scripts/modules/subscription/subscription_service.gd")
 
 func _init() -> void:
 	call_deferred("_run")
@@ -29,26 +29,27 @@ rules:
 	if not _write_file(provider_dir.path_join("hexagon-v2.txt"), "vless://123e4567-e89b-12d3-a456-426614174000@127.0.0.1:443?encryption=none&security=reality&sni=example.com&pbk=test&type=tcp#VLESS-Migration\nhysteria2://password@127.0.0.1:24443?sni=example.com#HY2-Migration\n"):
 		_fail("无法准备旧 V2 provider", 3)
 		return
-	var controller: CoreController = CoreControllerScript.new()
-	root.add_child(controller)
+	var subscription = SubscriptionServiceScript.new()
+	root.add_child(subscription)
 	await process_frame
-	var entries := controller.get_subscriptions()
+	subscription.initialize()
+	var entries: Array = subscription.get_subscriptions()
 	if entries.size() != 1 or str(entries[0].get("type", "")) != "v2":
 		_fail("旧 V2 配置没有迁移到订阅库", 4)
 		return
-	var migrated_yaml := FileAccess.get_file_as_string(controller.profile_path())
+	var migrated_yaml := FileAccess.get_file_as_string(subscription.profile_path())
 	if not migrated_yaml.contains("./providers/library/"):
 		_fail("迁移后的 V2 配置仍引用旧 provider 路径", 5)
 		return
 	var provider_file := str(entries[0].get("provider_file", ""))
-	if provider_file.is_empty() or not FileAccess.file_exists(controller.subscription_provider_dir().path_join(provider_file)):
+	if provider_file.is_empty() or not FileAccess.file_exists(subscription.subscription_provider_dir().path_join(provider_file)):
 		_fail("迁移后的 V2 provider 文件不存在", 6)
 		return
 	var hy2_provider_file := str(entries[0].get("hy2_provider_file", ""))
-	if hy2_provider_file.is_empty() or not FileAccess.file_exists(controller.subscription_provider_dir().path_join(hy2_provider_file)):
+	if hy2_provider_file.is_empty() or not FileAccess.file_exists(subscription.subscription_provider_dir().path_join(hy2_provider_file)):
 		_fail("旧 HY2 URI 没有自动迁移为 YAML provider", 7)
 		return
-	var hy2_yaml := FileAccess.get_file_as_string(controller.subscription_provider_dir().path_join(hy2_provider_file))
+	var hy2_yaml := FileAccess.get_file_as_string(subscription.subscription_provider_dir().path_join(hy2_provider_file))
 	if not hy2_yaml.contains("type: hysteria2") or not migrated_yaml.contains("hexagon-v2-hy2"):
 		_fail("迁移后的活动配置没有引用 HY2 YAML provider", 8)
 		return

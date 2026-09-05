@@ -1,6 +1,6 @@
 extends SceneTree
 
-const CoreControllerScript = preload("res://scripts/core_controller.gd")
+const FixtureScript = preload("res://tests/helpers/proxy_runtime_fixture.gd")
 
 func _init() -> void:
 	call_deferred("_run")
@@ -9,7 +9,7 @@ func _run() -> void:
 	var profiles := ProjectSettings.globalize_path("user://profiles")
 	var library := profiles.path_join("library")
 	DirAccess.make_dir_recursive_absolute(library)
-	var old_http := """# 六角代理生成的订阅配置
+	var old_http := """# HexagonProxy生成的订阅配置
 mixed-port: 7890
 mode: rule
 proxy-providers:
@@ -50,12 +50,12 @@ rules:
 	if not _write_file(library.path_join("index.json"), JSON.stringify(index, "  ")):
 		_fail("无法准备订阅索引", 5)
 		return
-	var controller: CoreController = CoreControllerScript.new()
-	root.add_child(controller)
+	var fixture = FixtureScript.new()
+	root.add_child(fixture)
+	fixture.initialize()
 	await process_frame
-	controller._shutting_down = true
 	var upgraded := FileAccess.get_file_as_string(library.path_join("http.yaml"))
-	var active := FileAccess.get_file_as_string(controller.profile_path())
+	var active := FileAccess.get_file_as_string(fixture.subscription.profile_path())
 	var local_after := FileAccess.get_file_as_string(library.path_join("local.yaml"))
 	for required in [
 		"IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
@@ -73,12 +73,13 @@ rules:
 	if local_after != local_yaml:
 		_fail("本地 YAML 被自动改写", 8)
 		return
-	if not FileAccess.file_exists(controller.runtime_dir().path_join("rules/geosite-cn.mrs")):
+	if not FileAccess.file_exists(fixture.config().runtime_dir().path_join("rules/geosite-cn.mrs")):
 		_fail("国内域名规则集没有释放", 9)
 		return
-	if not FileAccess.file_exists(controller.runtime_dir().path_join("rules/geoip-cn.mrs")):
+	if not FileAccess.file_exists(fixture.config().runtime_dir().path_join("rules/geoip-cn.mrs")):
 		_fail("国内 IP 规则集没有释放", 10)
 		return
+	fixture.shutdown()
 	print("PASS: 国内直连规则升级、本地 YAML 保持原样与离线规则集")
 	quit(0)
 

@@ -49,7 +49,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path build | Out-Null
-          & ".godot-bin\Godot_v4.7-stable_win64.exe" --headless --path . --export-release "Windows Desktop" "build\六角代理.exe"
+          & ".godot-bin\Godot_v4.7-stable_win64.exe" --headless --path . --export-release "Windows Desktop" "build\HexagonProxy.exe"
 
       - name: Package release files
         shell: pwsh
@@ -58,8 +58,8 @@ jobs:
           $payload = Join-Path $packageRoot "payload"
           $temporaryInstaller = Join-Path $packageRoot "HexagonProxySetup.exe"
           New-Item -ItemType Directory -Force -Path dist, $payload | Out-Null
-          Copy-Item "build\六角代理.exe" "dist\HexagonProxy.exe" -Force
-          Copy-Item "build\六角代理.exe" (Join-Path $payload "HexagonProxy.exe") -Force
+          Copy-Item "build\HexagonProxy.exe" "dist\HexagonProxy.exe" -Force
+          Copy-Item "build\HexagonProxy.exe" (Join-Path $payload "HexagonProxy.exe") -Force
           Copy-Item LICENSE, THIRD_PARTY_NOTICES.md, installer\install.ps1, installer\uninstall.ps1 $payload -Force
           Copy-Item "third_party\Mihomo-LICENSE.txt" $payload -Force
           $source = $payload.TrimEnd("\") + "\"

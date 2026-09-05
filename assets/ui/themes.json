@@ -1,0 +1,47 @@
+{
+  "default": "blue_healing",
+  "themes": [
+    {
+      "id": "blue_healing",
+      "name": "海蓝治愈",
+      "description": "明亮柔和的水蓝色系",
+      "font_scale": 1.18,
+      "colors": {
+        "text": "#12384a", "muted": "#527384", "accent": "#1686a8", "accent_soft": "#c7ebf8de",
+        "border": "#86c7dfd8", "surface": "#dff5f7e8", "surface2": "#cbeaf2e6", "crystal": "#f4fcffe8",
+        "sidebar": "#e2f7f8ee", "nav": "#edf9fccc", "nav_active": "#b8e6f6e8", "overlay_text": "#efffff",
+        "danger": "#c84d68", "warning": "#b87918", "success": "#16866f", "console_bg": "#0b2634ee",
+        "console_text": "#e3fbff", "input": "#f5fdffe8", "disabled": "#b9cbd1aa", "background_modulate": "#d8f6ff"
+      },
+      "button_textures": {
+        "normal": "res://assets/ui/button_blue_normal.svg", "hover": "res://assets/ui/button_blue_hover.svg", "pressed": "res://assets/ui/button_blue_pressed.svg"
+      },
+      "panel_textures": {
+        "surface": "res://assets/ui/panel_blue_surface.svg", "surface2": "res://assets/ui/panel_blue_surface2.svg",
+        "crystal": "res://assets/ui/panel_blue_crystal.svg", "sidebar": "res://assets/ui/panel_blue_sidebar.svg",
+        "input": "res://assets/ui/panel_blue_input.svg", "console": "res://assets/ui/panel_blue_console.svg"
+      }
+    },
+    {
+      "id": "midnight",
+      "name": "夜海黑",
+      "description": "深色低刺激夜间主题",
+      "font_scale": 1.18,
+      "colors": {
+        "text": "#e7f5fb", "muted": "#9bb7c5", "accent": "#67c8eb", "accent_soft": "#284c5fdc",
+        "border": "#45667acc", "surface": "#182a37e8", "surface2": "#223846e8", "crystal": "#13232fe8",
+        "sidebar": "#122430f2", "nav": "#1b3341e8", "nav_active": "#28566bea", "overlay_text": "#f2fbff",
+        "danger": "#ff8290", "warning": "#f0c46c", "success": "#64d7b0", "console_bg": "#07121af4",
+        "console_text": "#dcf8ff", "input": "#101e29ee", "disabled": "#334550cc", "background_modulate": "#506674"
+      },
+      "button_textures": {
+        "normal": "res://assets/ui/button_dark_normal.svg", "hover": "res://assets/ui/button_dark_hover.svg", "pressed": "res://assets/ui/button_dark_pressed.svg"
+      },
+      "panel_textures": {
+        "surface": "res://assets/ui/panel_dark_surface.svg", "surface2": "res://assets/ui/panel_dark_surface2.svg",
+        "crystal": "res://assets/ui/panel_dark_crystal.svg", "sidebar": "res://assets/ui/panel_dark_sidebar.svg",
+        "input": "res://assets/ui/panel_dark_input.svg", "console": "res://assets/ui/panel_dark_console.svg"
+      }
+    }
+  ]
+}

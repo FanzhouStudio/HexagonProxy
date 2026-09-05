@@ -1,9 +1,9 @@
 Q群：1102815471
 <p align="center">
-  <img src="assets/app_icon.png" width="96" alt="六角代理图标">
+  <img src="assets/app_icon.png" width="96" alt="HexagonProxy图标">
 </p>
 
-<h1 align="center">六角代理</h1>
+<h1 align="center">HexagonProxy</h1>
 
 <p align="center">
   一只会守护网络的像素美西螈<br>
@@ -17,7 +17,7 @@ Q群：1102815471
   <img alt="License" src="https://img.shields.io/badge/License-AGPL--3.0--only-663399">
 </p>
 无论你拿到的是 Clash/Mihomo 订阅，还是 VLESS、VMess、Trojan、SS、Hysteria2 等分享链接，粘贴后即可使用，无需在线转换，也无需更换客户端。
-六角代理把订阅、节点、系统代理和桌面宠物放进同一个浅色水晶界面。应用负责本地管理与交互，网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理。
+HexagonProxy把订阅、节点、系统代理和桌面宠物放进同一个浅色水晶界面。应用负责本地管理与交互，网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理。
 
 ## 下载
 
@@ -37,6 +37,8 @@ Q群：1102815471
 - 支持 VLESS Reality、VMess、Hysteria2、Trojan、SS、SSR、TUIC
 - 节点选择、单节点测速和批量测速
 - 规则、全局、直连三种代理模式；规则模式下回环、局域网及中国大陆地址直连，全局模式下其余可代理流量统一走当前节点
+- 应用分流：可选择 Windows `.exe`，按进程名设置直连或走代理；应用规则优先于域名/IP 规则
+- 节点故障切换：可手动加入备选节点；当前节点连续探测失败后自动选择可用备选中延迟最低者，并通过冷却与熔断机制避免全部掉线时循环切换
 - 实时速度、累计流量与活动连接统计
 - 托盘驻留、开机自启和可拖动的透明桌面宠物
 - 内核版本检查与应用内更新
@@ -48,14 +50,14 @@ Q群：1102815471
 2. 切换到想使用的订阅，在“节点”中选择线路并测速。
 3. 返回“总览”，打开“一键连接”。
 
-关闭主窗口后应用默认驻留系统托盘。需要完全退出时，请使用托盘菜单中的“退出六角代理”。
+关闭主窗口后应用默认驻留系统托盘。需要完全退出时，请使用托盘菜单中的“退出HexagonProxy”。
 
 ## 隐私与安全
 
-- 订阅内容仅存放在本机 Godot 用户数据目录，不会上传到六角代理服务器。
+- 订阅内容仅存放在本机 Godot 用户数据目录，不会上传到HexagonProxy服务器。
 - Mihomo 控制接口仅监听 `127.0.0.1`，并为每份运行配置生成访问密钥。
 - 正常退出时会关闭本应用启用的 Windows 系统代理并停止本应用启动的内核进程。
-- 当前使用 Windows 系统 HTTP/SOCKS 混合代理；暂未提供 TUN 模式。
+- 当前使用 Windows 系统 HTTP/SOCKS 混合代理；应用分流只对实际进入HexagonProxy的流量生效，暂未提供 TUN 模式，因此部分游戏或忽略系统代理的软件可能不受分流规则控制。
 
 <details>
 <summary><strong>从源码运行与构建</strong></summary>
@@ -78,11 +80,11 @@ powershell -ExecutionPolicy Bypass -File tools/build_windows_release.ps1
 
 ## 开源许可与商业授权
 
-六角代理的原创客户端代码及随附材料以 **GNU Affero General Public License v3.0 only（AGPL-3.0-only）** 开源。你可以免费使用、研究、修改和分发，也可以商业使用，但必须遵守 AGPL-3.0 的源码公开、相同许可证和通知保留等要求。许可范围见 [LICENSING.md](LICENSING.md)，完整条款见 [LICENSE](LICENSE)，源码获取说明见 [SOURCE.md](SOURCE.md)。
+HexagonProxy的原创客户端代码及随附材料以 **GNU Affero General Public License v3.0 only（AGPL-3.0-only）** 开源。你可以免费使用、研究、修改和分发，也可以商业使用，但必须遵守 AGPL-3.0 的源码公开、相同许可证和通知保留等要求。许可范围见 [LICENSING.md](LICENSING.md)，完整条款见 [LICENSE](LICENSE)，源码获取说明见 [SOURCE.md](SOURCE.md)。
 
 如果企业需要闭源集成、OEM/品牌定制、私有发行，或希望获得不受 AGPL-3.0 约束的其他权利，可以申请单独的商业授权。商业授权不是使用本开源版本的必要条件，详情见 [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)，联系邮箱：**494919080@qq.com**。
 
-“六角代理”“Hexagon Proxy”“FanzhouStudio”以及项目名称、Logo 和官方版本标识不因代码开源而自动授权。第三方版本不得冒充官方版本，详见 [TRADEMARK.md](TRADEMARK.md)。
+“HexagonProxy”“HexagonProxy”“FanzhouStudio”以及项目名称、Logo 和官方版本标识不因代码开源而自动授权。第三方版本不得冒充官方版本，详见 [TRADEMARK.md](TRADEMARK.md)。
 
 欢迎提交 Issue 和 Pull Request。提交代码前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CLA.md](CLA.md)；贡献者协议使项目能够在保持社区版本开源的同时，继续向企业提供单独的商业授权。
 

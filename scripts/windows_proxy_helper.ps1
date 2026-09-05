@@ -3,7 +3,8 @@ param(
     [ValidateSet('enable', 'disable')]
     [string]$Action,
     [Parameter(Mandatory = $true)]
-    [string]$StatePath
+    [string]$StatePath,
+    [string]$ProxyServer = '127.0.0.1:7890'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,7 +29,7 @@ if ($Action -eq 'enable') {
         ProxyOverrideExists = [bool]$override.Exists
         ProxyOverride = [string]$override.Value
     } | ConvertTo-Json -Compress | Set-Content -LiteralPath $StatePath -Encoding UTF8
-    Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyServer' -Type String -Value '127.0.0.1:7890'
+    Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyServer' -Type String -Value $ProxyServer
     Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyOverride' -Type String -Value '<local>'
     Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyEnable' -Type DWord -Value 1
 } else {

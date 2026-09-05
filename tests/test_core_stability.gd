@@ -1,57 +1,74 @@
 extends SceneTree
 
-const CoreControllerScript = preload("res://scripts/core_controller.gd")
+const FixtureScript = preload("res://tests/helpers/proxy_runtime_fixture.gd")
 
 func _init() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	var controller: CoreController = CoreControllerScript.new()
-	root.add_child(controller)
+	var fixture = FixtureScript.new()
+	root.add_child(fixture)
+	fixture.initialize()
 	await process_frame
-	var valid_profile := FileAccess.get_file_as_string(controller.profile_path())
-	if not bool(controller._validate_active_profile().get("ok", false)):
-		printerr("FAIL: 默认配置未通过 Mihomo 校验")
-		quit(2)
+	var proxy = fixture.proxy
+	var config = fixture.config()
+	var subscription = fixture.subscription
+	var valid_profile := FileAccess.get_file_as_string(subscription.profile_path())
+	if not bool(proxy.validator.validate().get("ok", false)):
+		_fail("默认配置未通过 Mihomo 校验", 2)
 		return
-	if not controller._write_profile("broken: [\n"):
-		printerr("FAIL: 无法写入无效配置测试样本")
-		quit(3)
+	if not _write_text(subscription.profile_path(), "broken: [\n"):
+		_fail("无法写入无效配置测试样本", 3)
 		return
-	if bool(controller._validate_active_profile().get("ok", true)):
-		printerr("FAIL: 无效配置没有被启动前校验拦截")
-		quit(4)
+	proxy.validator.setup(config.core_path(), config.runtime_dir(), subscription.profile_path())
+	if bool(proxy.validator.validate().get("ok", true)):
+		_fail("无效配置没有被启动前校验拦截", 4)
 		return
-	controller._write_profile(valid_profile)
+	if not _write_text(subscription.profile_path(), valid_profile):
+		_fail("无法恢复有效配置测试样本", 9)
+		return
+	proxy.validator.setup(config.core_path(), config.runtime_dir(), subscription.profile_path())
 
 	var blocker := TCPServer.new()
 	var owns_blocker := false
-	if controller._tcp_port_is_available(controller.CONTROLLER_PORT):
-		owns_blocker = blocker.listen(controller.CONTROLLER_PORT, controller.CONTROLLER_HOST) == OK
-	controller._should_run = true
-	controller._launch_core()
-	await process_frame
-	if controller.core_pid > 0 or controller._should_run:
-		if controller.core_pid > 0:
-			controller.stop_core()
-		if owns_blocker:
-			blocker.stop()
-		printerr("FAIL: 端口冲突没有阻止内核启动")
-		quit(5)
+	if _tcp_port_is_available(config.controller_port(), config.controller_host()):
+		owns_blocker = blocker.listen(config.controller_port(), config.controller_host()) == OK
+	if owns_blocker and str(config.controller_port()) not in proxy._occupied_ports():
+		blocker.stop()
+		_fail("ProxyService 没有检测到控制端口冲突", 5)
 		return
 	if owns_blocker:
 		blocker.stop()
 
-	controller.core_pid = 2147483647
-	controller._core_started_msec = Time.get_ticks_msec() - controller.CORE_PROCESS_START_GRACE_MSEC
-	controller._should_run = true
-	controller._monitor_core_process()
-	await process_frame
-	if controller.core_pid != -1 or not controller._recovery_pending or controller._recovery_attempts != 1:
-		controller.stop_core()
-		printerr("FAIL: 异常退出没有进入有限自动恢复")
-		quit(6)
+	for method_name in ["start", "stop", "restart", "set_online_state", "is_running"]:
+		if not proxy.has_method(method_name):
+			_fail("ProxyService 缺少生命周期方法：%s" % method_name, 6)
+			return
+	if proxy.recovery.DELAYS != [1.0, 3.0, 8.0]:
+		_fail("恢复退避参数不一致", 7)
 		return
-	controller.stop_core()
-	print("PASS: 配置预检、端口冲突拦截与恢复参数")
+	proxy.api_secret_changed.emit("test-secret")
+	if fixture.api.api_secret != "test-secret":
+		_fail("ProxyService API secret 没有同步到 MihomoApiService", 8)
+		return
+	fixture.shutdown()
+	print("PASS: 配置预检、端口冲突与 ProxyService 生命周期契约")
 	quit(0)
+
+func _write_text(path: String, content: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(content)
+	file.close()
+	return true
+
+func _tcp_port_is_available(port: int, host: String) -> bool:
+	var server := TCPServer.new()
+	var result := server.listen(port, host)
+	server.stop()
+	return result == OK
+
+func _fail(message: String, code: int) -> void:
+	printerr("FAIL: %s" % message)
+	quit(code)

@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$displayName = -join [char[]](0x516D, 0x89D2, 0x4EE3, 0x7406)
+$displayName = "HexagonProxy"
 $installDir = Join-Path $env:LOCALAPPDATA "Programs\HexagonProxy"
 $appPath = Join-Path $installDir "HexagonProxy.exe"
 $sourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path

@@ -1,5 +1,6 @@
 param(
-    [string]$GodotPath = "D:\Downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe"
+    [string]$GodotPath = "D:\Downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe",
+    [switch]$WithInstaller
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,16 +12,12 @@ $packagingDir = Join-Path ([System.IO.Path]::GetTempPath()) ("hexagon_proxy_iexp
 $stagingDir = Join-Path $packagingDir "payload"
 $portablePath = Join-Path $distDir "HexagonProxy.exe"
 $installerPath = Join-Path $distDir "HexagonProxySetup.exe"
-$corePath = Join-Path $projectRoot "bin\mihomo.exe"
 $templatePath = Join-Path $projectRoot "installer\package.sed"
 $generatedSedPath = Join-Path $packagingDir "package.generated.sed"
 $temporaryInstallerPath = Join-Path $packagingDir "HexagonProxySetup.exe"
 
 if (-not (Test-Path -LiteralPath $GodotPath)) {
     throw "Godot was not found: $GodotPath"
-}
-if (-not (Test-Path -LiteralPath $corePath)) {
-    throw "Mihomo was not found: $corePath"
 }
 
 New-Item -ItemType Directory -Force -Path $distDir, $buildDir, $stagingDir | Out-Null
@@ -59,12 +56,31 @@ Invoke-IsolatedGodotTest "routing_rules" "res://tests/test_routing_rules.gd" "Ro
 Invoke-IsolatedGodotTest "large_subscription" "res://tests/test_large_subscription_ui.gd" "Large subscription test failed"
 Invoke-IsolatedGodotTest "close_behavior" "res://tests/test_close_behavior.gd" "Close behavior test failed"
 Invoke-IsolatedGodotTest "hysteria2" "res://tests/test_hysteria2_conversion.gd" "Hysteria2 conversion test failed"
+Invoke-IsolatedGodotTest "ui_theme" "res://tests/test_ui_theme.gd" "UI texture/theme test failed"
+Invoke-IsolatedGodotTest "layout_1080" "res://tests/test_layout_1080.gd" "1920x1080 layout test failed"
+Invoke-IsolatedGodotTest "node_failover" "res://tests/test_node_failover.gd" "Node failover test failed"
+Invoke-IsolatedGodotTest "brand_identity" "res://tests/test_brand_identity.gd" "Brand identity test failed"
 
-Write-Host "[2/4] Exporting portable application"
+$stepCount = if ($WithInstaller) { 4 } else { 2 }
+Write-Host ("[2/{0}] Exporting portable application" -f $stepCount)
 Remove-Item -LiteralPath $portablePath -Force -ErrorAction SilentlyContinue
 & $GodotPath --headless --path $projectRoot --export-release "Windows Desktop" $portablePath
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $portablePath)) {
     throw "Godot export failed"
+}
+
+$portable = Get-Item -LiteralPath $portablePath
+$portableHash = (Get-FileHash -LiteralPath $portablePath -Algorithm SHA256).Hash
+$checksumPath = Join-Path $distDir "SHA256SUMS.txt"
+if (-not $WithInstaller) {
+    Set-Content -LiteralPath $checksumPath -Value "$portableHash *$($portable.Name)" -Encoding UTF8
+    Write-Host ""
+    Write-Host "Release completed:"
+    Write-Host ("  Portable: {0} ({1:N1} MB)" -f $portable.FullName, ($portable.Length / 1MB))
+    Write-Host ("  SHA256:  {0}" -f $portableHash)
+    Write-Host "  Mihomo:  downloaded on demand from Settings"
+    Remove-Item -LiteralPath $packagingDir -Recurse -Force -ErrorAction SilentlyContinue
+    exit 0
 }
 
 Write-Host "[3/4] Preparing installer payload"
