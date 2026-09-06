@@ -33,6 +33,11 @@ func _run() -> void:
 	service.finished.connect(func(exit_code: int, stopped: bool) -> void:
 		finish_events.append({"exit_code": exit_code, "stopped": stopped})
 	)
+	var transparent_launch: Dictionary = service._prepare_launch("powershell", "Write-Output 'transparent'", "security-test", work_dir)
+	var transparent_args := " ".join(PackedStringArray(transparent_launch.get("args", PackedStringArray())))
+	if transparent_args.contains("EncodedCommand") or transparent_args.contains("Bypass") or not transparent_args.contains("RemoteSigned"):
+		_fail("PowerShell 启动参数重新引入了隐藏编码/Bypass，或未使用透明的 RemoteSigned 脚本", 18)
+		return
 
 	if not service.run_command("powershell", "Write-Output (Get-Location).Path; Write-Output 'hexagon-ps-test 六角终端'"):
 		_fail("PowerShell 命令无法启动", 2)

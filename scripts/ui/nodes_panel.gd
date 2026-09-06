@@ -32,6 +32,9 @@ var delay_cache := {}
 var _group_delay_pending: Array[String] = []
 var _current_node_name := ""
 var _rebuild_generation := 0
+var _rendered_structure_signature := ""
+var _building_structure_signature := ""
+var _node_views: Dictionary = {}
 var _page_active := false
 var _global_mode_active := false
 
@@ -92,8 +95,11 @@ func build() -> Control:
 
 func set_active(value: bool) -> void:
 	_page_active = value
-	if value:
-		_rebuild_nodes()
+	if not value:
+		_rebuild_generation += 1
+		_building_structure_signature = ""
+		return
+	_ensure_nodes_rendered()
 
 func set_global_mode_active(value: bool) -> void:
 	_global_mode_active = value
@@ -121,7 +127,7 @@ func set_failover_snapshot(snapshot: Dictionary) -> void:
 	var membership_changed := old_backup_signature != JSON.stringify(snapshot.get("backups", []))
 	var route_changed := old_route_group != str(snapshot.get("route_group", ""))
 	if membership_changed or route_changed:
-		_rebuild_nodes()
+		_refresh_visible_node_states()
 
 func _is_backup(group_name: String, node_name: String) -> bool:
 	var items: Variant = _failover_snapshot.get("backups", [])
@@ -140,7 +146,7 @@ func handle_api_result(action: String, ok: bool, payload: Variant) -> bool:
 	if action.begins_with("delay:"):
 		var proxy_name := action.trim_prefix("delay:")
 		delay_cache[proxy_name] = int(payload.get("delay", -1)) if ok and payload is Dictionary else -1
-		_rebuild_nodes()
+		_refresh_node_view(proxy_name)
 		_emit_node_status()
 		return true
 	if action == "group_delay":
@@ -164,44 +170,49 @@ func _apply_group_delay(ok: bool, payload: Variant) -> void:
 		for proxy_name in _group_delay_pending:
 			delay_cache[proxy_name] = -1
 	_group_delay_pending.clear()
-	_rebuild_nodes()
+	_refresh_visible_node_states()
 	_emit_node_status()
 
 func _apply_proxies(payload: Dictionary) -> void:
+	var selected_name := ""
+	if is_instance_valid(group_selector) and group_selector.item_count > 0 and selected_group_index < group_selector.item_count:
+		selected_name = group_selector.get_item_text(selected_group_index)
 	var proxy_map_value: Variant = payload.get("proxies", {})
 	var proxy_map: Dictionary = proxy_map_value if proxy_map_value is Dictionary else {}
 	var groups: Array = []
 	for proxy_name in proxy_map:
 		var data: Variant = proxy_map[proxy_name]
-		if not data is Dictionary:
-			continue
-		if str(proxy_name).to_upper() == "GLOBAL":
+		if not data is Dictionary or str(proxy_name).to_upper() == "GLOBAL":
 			continue
 		var kind := str(data.get("type", ""))
 		if kind in ["Selector", "URLTest", "Fallback", "LoadBalance"] and data.get("all", []) is Array:
 			groups.append({"name": str(proxy_name), "type": kind, "now": str(data.get("now", "")), "all": data.get("all", [])})
 	proxy_groups = groups
-	if not is_instance_valid(group_selector):
-		_emit_node_status()
-		return
-	var selected_name := ""
-	if group_selector.item_count > 0 and selected_group_index < group_selector.item_count:
-		selected_name = group_selector.get_item_text(selected_group_index)
-	group_selector.clear()
 	var next_selected_index := -1
 	var preferred_index := -1
 	for index in proxy_groups.size():
 		var group: Dictionary = proxy_groups[index]
-		group_selector.add_item(str(group.get("name", "")))
 		if str(group.get("name", "")) == selected_name:
 			next_selected_index = index
 		if str(group.get("name", "")) == "六角选择":
 			preferred_index = index
 	selected_group_index = next_selected_index if next_selected_index >= 0 else preferred_index if preferred_index >= 0 else 0
-	if group_selector.item_count > 0:
-		group_selector.select(selected_group_index)
+	if is_instance_valid(group_selector):
+		var selector_changed := group_selector.item_count != proxy_groups.size()
+		if not selector_changed:
+			for index in proxy_groups.size():
+				if group_selector.get_item_text(index) != str(proxy_groups[index].get("name", "")):
+					selector_changed = true
+					break
+		if selector_changed:
+			group_selector.clear()
+			for group in proxy_groups:
+				group_selector.add_item(str(group.get("name", "")))
+		if group_selector.item_count > 0:
+			group_selector.select(selected_group_index)
 	_current_node_name = str(selected_group().get("now", ""))
-	_rebuild_nodes()
+	_ensure_nodes_rendered()
+	_refresh_visible_node_states()
 	_emit_node_status()
 
 func _on_group_selected(index: int) -> void:
@@ -210,7 +221,8 @@ func _on_group_selected(index: int) -> void:
 	_current_node_name = str(group.get("now", ""))
 	if _global_mode_active:
 		global_group_requested.emit(str(group.get("name", "")))
-	_rebuild_nodes()
+	_ensure_nodes_rendered()
+	_refresh_visible_node_states()
 	_emit_node_status()
 
 func _test_visible_nodes() -> void:
@@ -224,38 +236,115 @@ func _test_visible_nodes() -> void:
 		var proxy_name := str(proxy_name_variant)
 		_group_delay_pending.append(proxy_name)
 		delay_cache[proxy_name] = -2
-	_rebuild_nodes()
+	_refresh_visible_node_states()
 	group_delay_requested.emit(str(group.get("name", "")))
 
 func _emit_node_status() -> void:
 	node_status_changed.emit(_current_node_name, current_delay())
+
+func _selected_structure_signature() -> String:
+	var group := selected_group()
+	if group.is_empty():
+		return "__empty__"
+	return "%s|%s" % [str(group.get("name", "")), JSON.stringify(group.get("all", []))]
+
+func _ensure_nodes_rendered() -> void:
+	if not _page_active or not is_instance_valid(node_grid):
+		return
+	var signature := _selected_structure_signature()
+	if signature == _rendered_structure_signature:
+		_refresh_visible_node_states()
+		return
+	if signature == _building_structure_signature:
+		return
+	_rebuild_nodes()
+
+func _create_node_grid() -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	return grid
 
 func _rebuild_nodes() -> void:
 	_rebuild_generation += 1
 	var generation := _rebuild_generation
 	if not _page_active or not is_instance_valid(node_grid):
 		return
-	for child in node_grid.get_children():
-		node_grid.remove_child(child)
-		child.queue_free()
+	var signature := _selected_structure_signature()
+	_building_structure_signature = signature
+	var host := node_grid.get_parent()
+	if not is_instance_valid(host):
+		_building_structure_signature = ""
+		return
+	var new_grid := _create_node_grid()
+	var new_views: Dictionary = {}
 	var group := selected_group()
-	if group.is_empty():
-		node_grid.add_child(ui.empty_message("连接后，这里会出现节点。"))
-		return
-	var nodes_value: Variant = group.get("all", [])
+	var nodes_value: Variant = group.get("all", []) if not group.is_empty() else []
 	var nodes: Array = nodes_value if nodes_value is Array else []
-	if nodes.is_empty():
-		node_grid.add_child(ui.empty_message("这个策略组暂时没有节点。"))
+	if group.is_empty():
+		new_grid.add_child(ui.empty_message("连接后，这里会出现节点。"))
+	elif nodes.is_empty():
+		new_grid.add_child(ui.empty_message("这个策略组暂时没有节点。"))
+	else:
+		for index in nodes.size():
+			if generation != _rebuild_generation or not _page_active:
+				new_grid.free()
+				if generation == _rebuild_generation:
+					_building_structure_signature = ""
+				return
+			var proxy_name := str(nodes[index])
+			new_grid.add_child(_node_card(str(group.get("name", "")), proxy_name, proxy_name == str(group.get("now", "")), new_views))
+			if (index + 1) % NODE_RENDER_BATCH_SIZE == 0:
+				await get_tree().process_frame
+	if generation != _rebuild_generation or not _page_active:
+		new_grid.free()
+		if generation == _rebuild_generation:
+			_building_structure_signature = ""
 		return
-	for index in nodes.size():
-		if generation != _rebuild_generation or not _page_active:
-			return
-		var proxy_name := str(nodes[index])
-		node_grid.add_child(_node_card(str(group.get("name", "")), proxy_name, proxy_name == str(group.get("now", ""))))
-		if (index + 1) % NODE_RENDER_BATCH_SIZE == 0:
-			await get_tree().process_frame
+	var old_grid := node_grid
+	host.remove_child(old_grid)
+	host.add_child(new_grid)
+	node_grid = new_grid
+	_node_views = new_views
+	_rendered_structure_signature = signature
+	_building_structure_signature = ""
+	old_grid.queue_free()
+	_refresh_visible_node_states()
 
-func _node_card(group_name: String, proxy_name: String, selected: bool) -> PanelContainer:
+func _refresh_visible_node_states() -> void:
+	for proxy_name in _node_views.keys():
+		_refresh_node_view(str(proxy_name))
+
+func _refresh_node_view(proxy_name: String) -> void:
+	var raw: Variant = _node_views.get(proxy_name, {})
+	if not raw is Dictionary:
+		return
+	var view: Dictionary = raw
+	var group_name := str(view.get("group", ""))
+	var group := selected_group()
+	var selected := group_name == str(group.get("name", "")) and proxy_name == str(group.get("now", ""))
+	var card: PanelContainer = view.get("card")
+	ui.update_panel_style(card, GREEN_DARK if selected else SURFACE, GREEN if selected else BORDER, 16)
+	var delay := int(delay_cache.get(proxy_name, 0))
+	var delay_label: Label = view.get("delay_label")
+	if is_instance_valid(delay_label):
+		delay_label.text = "测速" if delay == 0 else "测速中…" if delay == -2 else "失败" if delay < 0 else "%d ms" % delay
+		ui.update_label_color(delay_label, MUTED if delay in [0, -2] else RED if delay < 0 else GREEN if delay < 180 else YELLOW)
+	var backup: Button = view.get("backup_button")
+	if is_instance_valid(backup):
+		var backup_enabled := _is_backup(group_name, proxy_name)
+		var route_group := str(_failover_snapshot.get("route_group", ""))
+		backup.text = "★ 备选" if backup_enabled else "☆ 备选"
+		backup.disabled = not route_group.is_empty() and route_group != group_name
+		backup.tooltip_text = "当前自动守护组为：%s" % route_group if backup.disabled else "移出自动故障切换备选组" if backup_enabled else "加入自动故障切换备选组"
+	var choose: Button = view.get("choose_button")
+	if is_instance_valid(choose):
+		choose.text = "已选" if selected else "选择"
+		choose.disabled = selected
+
+func _node_card(group_name: String, proxy_name: String, selected: bool, views: Dictionary) -> PanelContainer:
 	var card := ui.panel(GREEN_DARK if selected else SURFACE, GREEN if selected else BORDER, 16)
 	card.custom_minimum_size = Vector2(245, 112)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -279,21 +368,17 @@ func _node_card(group_name: String, proxy_name: String, selected: bool) -> Panel
 	var test := ui.small_choice_button("测")
 	test.pressed.connect(func() -> void:
 		delay_cache[proxy_name] = -2
-		_rebuild_nodes()
+		_refresh_node_view(proxy_name)
 		proxy_delay_requested.emit(proxy_name)
 	)
 	bottom.add_child(test)
 	var backup_enabled := _is_backup(group_name, proxy_name)
 	var backup := ui.small_choice_button("★ 备选" if backup_enabled else "☆ 备选")
-	var route_group := str(_failover_snapshot.get("route_group", ""))
-	backup.disabled = not route_group.is_empty() and route_group != group_name
-	backup.tooltip_text = "移出自动故障切换备选组" if backup_enabled else "加入自动故障切换备选组"
-	if backup.disabled:
-		backup.tooltip_text = "当前自动守护组为：%s" % route_group
-	backup.pressed.connect(func() -> void: backup_toggle_requested.emit(group_name, proxy_name, not backup_enabled))
+	backup.pressed.connect(func() -> void: backup_toggle_requested.emit(group_name, proxy_name, not _is_backup(group_name, proxy_name)))
 	bottom.add_child(backup)
 	var choose := ui.small_choice_button("已选" if selected else "选择")
 	choose.disabled = selected
 	choose.pressed.connect(func() -> void: proxy_select_requested.emit(group_name, proxy_name))
 	bottom.add_child(choose)
+	views[proxy_name] = {"group": group_name, "card": card, "delay_label": delay_label, "backup_button": backup, "choose_button": choose}
 	return card

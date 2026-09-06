@@ -95,6 +95,29 @@ func apply_background_theme(item: CanvasItem) -> void:
 	if not item in _tracked_backgrounds:
 		_tracked_backgrounds.append(item)
 
+func update_panel_style(panel: PanelContainer, fill: Color, border: Color, radius := 16) -> void:
+	if not is_instance_valid(panel):
+		return
+	for entry in _tracked_panels:
+		if entry.get("node") == panel:
+			entry["fill"] = fill
+			entry["border"] = border
+			entry["radius"] = radius
+			entry["fill_role"] = _semantic_role(fill)
+			entry["border_role"] = _semantic_role(border)
+			break
+	panel.add_theme_stylebox_override("panel", _panel_style(_resolve_color(fill), _resolve_color(border), radius))
+
+func update_label_color(label_node: Label, color_value: Color) -> void:
+	if not is_instance_valid(label_node):
+		return
+	for entry in _tracked_labels:
+		if entry.get("node") == label_node:
+			entry["color"] = color_value
+			entry["role"] = _semantic_role(color_value)
+			break
+	label_node.add_theme_color_override("font_color", _resolve_color(color_value))
+
 func margin(left: int, top: int, right: int, bottom: int) -> MarginContainer:
 	var result := MarginContainer.new()
 	result.add_theme_constant_override("margin_left", left)
@@ -349,6 +372,7 @@ func _role_from_color(value: Color) -> String:
 	return ""
 
 func _retheme_tracked() -> void:
+	_prune_invalid_tracked()
 	for item in _tracked_backgrounds:
 		if is_instance_valid(item):
 			item.modulate = background_modulate_color
@@ -404,6 +428,19 @@ func _retheme_tracked() -> void:
 			apply_text_edit_theme(node, size)
 		elif kind == "console":
 			apply_console_theme(node, size)
+
+func _prune_invalid_tracked() -> void:
+	_tracked_labels = _tracked_labels.filter(func(entry): return is_instance_valid(entry.get("node")))
+	_tracked_panels = _tracked_panels.filter(func(entry): return is_instance_valid(entry.get("node")))
+	_tracked_buttons = _tracked_buttons.filter(func(entry): return is_instance_valid(entry.get("node")))
+	_tracked_toggles = _tracked_toggles.filter(func(node): return is_instance_valid(node))
+	_tracked_options = _tracked_options.filter(func(node): return is_instance_valid(node))
+	_tracked_inputs = _tracked_inputs.filter(func(entry): return is_instance_valid(entry.get("node")))
+	var valid_backgrounds: Array[CanvasItem] = []
+	for item in _tracked_backgrounds:
+		if is_instance_valid(item):
+			valid_backgrounds.append(item)
+	_tracked_backgrounds = valid_backgrounds
 
 func _track_input(node: Control, kind: String, base_size: int) -> void:
 	for entry in _tracked_inputs:

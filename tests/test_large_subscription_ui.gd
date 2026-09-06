@@ -46,21 +46,20 @@ func _run() -> void:
 		printerr("FAIL: 节点页分批渲染未完成，实际 %d / %d" % [nodes.node_grid.get_child_count(), NODE_COUNT])
 		quit(4)
 		return
-	nodes.delay_cache["测试节点-000"] = -2
-	nodes._rebuild_nodes()
-	await process_frame
 	var first_card := nodes.node_grid.get_child(0) as PanelContainer
+	var first_card_id: int = int(first_card.get_instance_id())
+	nodes.delay_cache["测试节点-000"] = -2
+	nodes._refresh_node_view("测试节点-000")
 	var first_delay_label := first_card.get_child(0).get_child(0).get_child(1).get_child(0) as Label
-	if first_delay_label.text != "测速中…":
-		printerr("FAIL: 单节点测速没有显示进行中状态")
+	if first_delay_label.text != "测速中…" or int(first_card.get_instance_id()) != first_card_id:
+		printerr("FAIL: 单节点测速没有原地显示进行中状态")
 		quit(7)
 		return
 	nodes.handle_api_result("delay:测试节点-000", false, {})
-	await process_frame
 	first_card = nodes.node_grid.get_child(0) as PanelContainer
 	first_delay_label = first_card.get_child(0).get_child(0).get_child(1).get_child(0) as Label
-	if first_delay_label.text != "失败":
-		printerr("FAIL: 单节点测速失败后没有反馈")
+	if first_delay_label.text != "失败" or int(first_card.get_instance_id()) != first_card_id:
+		printerr("FAIL: 单节点测速失败后没有原地反馈")
 		quit(8)
 		return
 	main.dashboard_panel.apply_connections({"downloadTotal": 0, "uploadTotal": 0, "connections": null})

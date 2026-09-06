@@ -139,9 +139,14 @@ func _prepare_launch(shell_name: String, command: String, token: String, work_di
 	var escaped_work_dir := work_dir.replace("'", "''")
 	var utf8_prelude := "$utf8 = New-Object System.Text.UTF8Encoding($false)\n[Console]::InputEncoding = $utf8\n[Console]::OutputEncoding = $utf8\n$OutputEncoding = $utf8\nchcp.com 65001 > $null\n$env:PYTHONUTF8 = '1'\n$env:PYTHONIOENCODING = 'utf-8'\n"
 	var script := "%s$ProgressPreference = 'SilentlyContinue'\n$global:LASTEXITCODE = 0\nSet-Location -LiteralPath '%s'\n& {\n%s\n} *>&1 | Out-File -LiteralPath '%s' -Encoding utf8 -Width 4096\nexit $LASTEXITCODE\n" % [utf8_prelude, escaped_work_dir, command, escaped_output]
-	var encoded := Marshalls.raw_to_base64(script.to_utf16_buffer())
-	_script_paths.clear()
-	return {"ok": true, "executable": "powershell.exe", "args": PackedStringArray(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded])}
+	var script_path := console_dir().path_join("command_%s.ps1" % token)
+	if not _write_utf8_bom(script_path, script):
+		return {"ok": false, "message": "无法写入 PowerShell 临时脚本。"}
+	_script_paths = [script_path]
+	# Keep the command transparent and inspectable: avoid Base64 EncodedCommand and
+	# ExecutionPolicy Bypass. RemoteSigned permits this locally generated script while
+	# still respecting stricter machine/group policies.
+	return {"ok": true, "executable": "powershell.exe", "args": PackedStringArray(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "RemoteSigned", "-File", script_path])}
 func _poll_output(final_chunk := false) -> void:
 	if _output_path.is_empty() or not FileAccess.file_exists(_output_path):
 		return
@@ -222,6 +227,16 @@ func _write_text(path: String, content: String) -> bool:
 	if file == null:
 		return false
 	file.store_string(content)
+	file.close()
+	return true
+
+func _write_utf8_bom(path: String, content: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	var bytes := PackedByteArray([0xef, 0xbb, 0xbf])
+	bytes.append_array(content.to_utf8_buffer())
+	file.store_buffer(bytes)
 	file.close()
 	return true
 

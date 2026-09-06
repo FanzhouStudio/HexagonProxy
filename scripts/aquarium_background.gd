@@ -3,34 +3,56 @@ extends Control
 
 const BUBBLE_COUNT := 34
 const WATER_TINT := Color(0.01, 0.09, 0.18, 0.22)
+const BUBBLE_FPS := 30.0
 
 var _background: Texture2D = preload("res://assets/aquarium_bg.png")
+var _background_rect: TextureRect
+var _water_overlay: ColorRect
 var _bubbles: Array[Dictionary] = []
 var _random := RandomNumberGenerator.new()
 var _elapsed := 0.0
+var _animation_accumulator := 0.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_build_static_layers()
 	_random.seed = 0xA601071
 	_reset_bubbles()
 	resized.connect(_on_resized)
 
+func _build_static_layers() -> void:
+	_background_rect = TextureRect.new()
+	_background_rect.texture = _background
+	_background_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_background_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_background_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_background_rect.show_behind_parent = true
+	_background_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_background_rect)
+	_water_overlay = ColorRect.new()
+	_water_overlay.color = WATER_TINT
+	_water_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_water_overlay.show_behind_parent = true
+	_water_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_water_overlay)
+
 func _process(delta: float) -> void:
-	_elapsed += delta
+	var window := get_window()
+	if not is_visible_in_tree() or not window.visible or window.mode == Window.MODE_MINIMIZED:
+		return
+	_animation_accumulator += delta
+	if _animation_accumulator < 1.0 / BUBBLE_FPS:
+		return
+	var step := _animation_accumulator
+	_animation_accumulator = 0.0
+	_elapsed += step
 	for bubble in _bubbles:
-		bubble["y"] = float(bubble["y"]) - float(bubble["speed"]) * delta
+		bubble["y"] = float(bubble["y"]) - float(bubble["speed"]) * step
 		if float(bubble["y"]) < -20.0:
 			_reset_bubble(bubble, true)
 	queue_redraw()
 
 func _draw() -> void:
-	if is_instance_valid(_background):
-		var texture_size := _background.get_size()
-		var texture_scale := maxf(size.x / texture_size.x, size.y / texture_size.y)
-		var drawn_size := texture_size * texture_scale
-		var offset := (size - drawn_size) * 0.5
-		draw_texture_rect(_background, Rect2(offset, drawn_size), false)
-	draw_rect(Rect2(Vector2.ZERO, size), WATER_TINT)
 	for bubble in _bubbles:
 		_draw_pixel_bubble(bubble)
 

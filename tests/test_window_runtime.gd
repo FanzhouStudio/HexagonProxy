@@ -47,10 +47,44 @@ func _run() -> void:
 		_fail("第二次 ESC 没有关闭退出确认", 7)
 		return
 
-	print("PASS: 默认无边框全屏 · F11 禁用 · 顶栏最小化 · ESC 退出确认")
+	scene.app_shell.show_page("nodes")
+	var names: Array = []
+	for index in 60:
+		names.append("刷新节点-%02d" % index)
+	var payload := {"proxies": {"六角选择": {"type": "Selector", "now": names[0], "all": names}}}
+	scene.nodes_panel.handle_api_result("proxies", true, payload)
+	var deadline := Time.get_ticks_msec() + 3000
+	while scene.nodes_panel.node_grid.get_child_count() < names.size() and Time.get_ticks_msec() < deadline:
+		await process_frame
+	for frame in 30:
+		scene.nodes_panel.handle_api_result("proxies", true, payload)
+		scene.nodes_panel.handle_api_result("delay:%s" % names[frame % names.size()], true, {"delay": 80 + frame})
+		await process_frame
+		if frame % 3 == 0 and _viewport_is_black(root):
+			_fail("节点周期刷新期间出现整帧黑屏", 8)
+			return
+
+	print("PASS: 默认无边框全屏 · F11 禁用 · 顶栏最小化 · ESC 退出确认 · 刷新无黑帧")
 	scene.queue_free()
 	await process_frame
 	quit(0)
+
+func _viewport_is_black(viewport: Viewport) -> bool:
+	var image := viewport.get_texture().get_image()
+	if image == null or image.get_width() <= 0 or image.get_height() <= 0:
+		return true
+	var width := image.get_width()
+	var height := image.get_height()
+	var points := [
+		Vector2i(int(width * 0.08), int(height * 0.12)),
+		Vector2i(int(width * 0.35), int(height * 0.16)),
+		Vector2i(int(width * 0.50), int(height * 0.45))
+	]
+	var brightest := 0.0
+	for point in points:
+		var color := image.get_pixel(point.x, point.y)
+		brightest = maxf(brightest, maxf(color.r, maxf(color.g, color.b)))
+	return brightest < 0.08
 
 func _fail(message: String, code: int) -> void:
 	printerr("FAIL: %s" % message)
