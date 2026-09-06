@@ -111,9 +111,11 @@ func _build_window_card() -> PanelContainer:
 	window_borderless_toggle.set_pressed_no_signal(proxy_config.window_borderless() if proxy_config.has_method("window_borderless") else true)
 	column.add_child(window_borderless_toggle)
 	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
 	column.add_child(row)
 	row.add_child(ui.label("窗口分辨率", 13, TEXT))
 	window_resolution_selector = OptionButton.new()
+	window_resolution_selector.custom_minimum_size.x = 120
 	ui.apply_crystal_option_theme(window_resolution_selector)
 	var saved_size: Vector2i = proxy_config.window_size() if proxy_config.has_method("window_size") else Vector2i(1920, 1080)
 	for index in WINDOW_RESOLUTIONS.size():
@@ -123,6 +125,7 @@ func _build_window_card() -> PanelContainer:
 			window_resolution_selector.select(index)
 	row.add_child(window_resolution_selector)
 	var apply := ui.small_choice_button("应用窗口")
+	apply.custom_minimum_size.x = 110
 	apply.pressed.connect(func() -> void:
 		var index := window_resolution_selector.selected
 		var size: Vector2i = WINDOW_RESOLUTIONS[index]
@@ -194,8 +197,10 @@ func _build_behavior_card() -> PanelContainer:
 	column.add_child(port_row)
 	var port_label := ui.label("本地混合端口", 13, TEXT)
 	port_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	port_label.custom_minimum_size.x = 90
 	port_row.add_child(port_label)
 	mixed_port_spin = _create_port_spin(proxy_config.mixed_port())
+	mixed_port_spin.custom_minimum_size.x = 90
 	port_row.add_child(mixed_port_spin)
 	var random_mixed := ui.small_choice_button("随机")
 	random_mixed.pressed.connect(func() -> void: port_random_requested.emit("mixed"))
@@ -209,6 +214,7 @@ func _build_behavior_card() -> PanelContainer:
 	api_row.add_theme_constant_override("separation", 8)
 	column.add_child(api_row)
 	controller_port_spin = _create_port_spin(proxy_config.controller_port())
+	controller_port_spin.custom_minimum_size.x = 90
 	api_row.add_child(controller_port_spin)
 	var random_controller := ui.small_choice_button("随机")
 	random_controller.pressed.connect(func() -> void: port_random_requested.emit("controller"))
