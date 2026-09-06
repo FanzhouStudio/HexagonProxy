@@ -4,7 +4,8 @@ param(
     [string]$Action,
     [Parameter(Mandatory = $true)]
     [string]$StatePath,
-    [string]$ProxyServer = '127.0.0.1:7890'
+    [string]$ProxyServer = '127.0.0.1:7890',
+    [string]$ProxyOverride = '<local>'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +19,17 @@ function Get-OptionalRegistryValue([string]$Name) {
     }
 }
 
+function Merge-ProxyOverride([string]$Required, [string]$Existing) {
+    $items = New-Object System.Collections.Generic.List[string]
+    foreach ($source in @($Required, $Existing)) {
+        foreach ($entry in ([string]$source -split ';')) {
+            $value = $entry.Trim()
+            if ($value -and -not ($items -contains $value)) { $items.Add($value) }
+        }
+    }
+    return ($items -join ';')
+}
+
 if ($Action -eq 'enable') {
     $enable = Get-OptionalRegistryValue 'ProxyEnable'
     $server = Get-OptionalRegistryValue 'ProxyServer'
@@ -29,8 +41,10 @@ if ($Action -eq 'enable') {
         ProxyOverrideExists = [bool]$override.Exists
         ProxyOverride = [string]$override.Value
     } | ConvertTo-Json -Compress | Set-Content -LiteralPath $StatePath -Encoding UTF8
+    $existingOverride = if ($override.Exists) { [string]$override.Value } else { '' }
+    $effectiveOverride = Merge-ProxyOverride $ProxyOverride $existingOverride
     Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyServer' -Type String -Value $ProxyServer
-    Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyOverride' -Type String -Value '<local>'
+    Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyOverride' -Type String -Value $effectiveOverride
     Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyEnable' -Type DWord -Value 1
 } else {
     if (Test-Path -LiteralPath $StatePath) {

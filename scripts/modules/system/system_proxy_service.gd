@@ -9,8 +9,10 @@ signal busy_changed(busy: bool)
 signal event_logged(message: String)
 
 const ProxyConfigScript = preload("res://scripts/modules/proxy/proxy_config.gd")
+const LocalNetworkCatalogScript = preload("res://scripts/modules/network/local_network_catalog.gd")
 
 var proxy_config
+var local_network_catalog = LocalNetworkCatalogScript.new()
 var enabled := false
 var busy := false
 var process_id := -1
@@ -57,7 +59,8 @@ func set_enabled(value: bool) -> void:
 	process_id = OS.create_process("powershell.exe", PackedStringArray([
 		"-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
 		"-File", helper_path(), action, state_path(),
-		"%s:%d" % [proxy_config.controller_host(), proxy_config.mixed_port()]
+		"%s:%d" % [proxy_config.controller_host(), proxy_config.mixed_port()],
+		local_network_catalog.windows_proxy_override()
 	]), false)
 	_started_msec = Time.get_ticks_msec()
 	if process_id <= 0:

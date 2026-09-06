@@ -50,6 +50,21 @@ func _run() -> void:
 			_fail("页面 %s 最小尺寸 %s 超出可用区域 %s" % [page_name, minimum, page_host.size], 4)
 			return
 
+	shell.show_page("settings")
+	await process_frame
+	var release_buttons: Array[Node] = shell.pages["settings"].find_children("*", "Button", true, false)
+	var release_count := 0
+	for node in release_buttons:
+		var button := node as Button
+		if button != null and button.text == "释放占用":
+			release_count += 1
+			if not page_host.get_global_rect().encloses(button.get_global_rect()):
+				_fail("端口释放按钮超出设置页可视区域", 8)
+				return
+	if release_count != 2:
+		_fail("设置页没有同时提供混合端口与控制端口释放入口", 9)
+		return
+
 	shell.show_page("terminal")
 	await process_frame
 	var host_bottom: float = page_host.get_global_rect().end.y

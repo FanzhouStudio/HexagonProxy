@@ -8,6 +8,12 @@ var command_service
 var preset_service
 var terminal_panel
 var _active := false
+var _pending_output := PackedStringArray()
+var _pending_output_chars := 0
+var _output_flush_elapsed := 0.0
+
+const OUTPUT_FLUSH_INTERVAL_SEC := 0.10
+const OUTPUT_FLUSH_SIZE := 262144
 
 func setup(service, presets, panel) -> void:
 	command_service = service
@@ -27,14 +33,25 @@ func setup(service, presets, panel) -> void:
 
 func start() -> void:
 	_active = true
+	_pending_output.clear()
+	_pending_output_chars = 0
+	_output_flush_elapsed = 0.0
 	terminal_panel.set_working_directory(command_service.working_directory())
 	terminal_panel.set_running(command_service.is_running(), "运行中" if command_service.is_running() else "就绪")
 	_refresh_presets()
 
 func shutdown() -> void:
+	_flush_output()
 	_active = false
 	if command_service.is_running():
 		command_service.stop()
+
+func _process(delta: float) -> void:
+	if not _active or _pending_output.is_empty():
+		return
+	_output_flush_elapsed += delta
+	if _output_flush_elapsed >= OUTPUT_FLUSH_INTERVAL_SEC:
+		_flush_output()
 func _on_run_requested(shell_name: String, command: String) -> void:
 	if _active:
 		command_service.run_command(shell_name, command)
@@ -82,13 +99,30 @@ func _refresh_presets() -> void:
 		terminal_panel.set_presets(preset_service.list_presets())
 
 func _on_output_appended(text: String) -> void:
-	if _active:
-		terminal_panel.append_output(text)
+	if not _active or text.is_empty():
+		return
+	_pending_output.append(text)
+	_pending_output_chars += text.length()
+	if _pending_output_chars >= OUTPUT_FLUSH_SIZE:
+		_flush_output()
+
+func _flush_output() -> void:
+	if _pending_output.is_empty() or not is_instance_valid(terminal_panel):
+		_output_flush_elapsed = 0.0
+		return
+	var text := "".join(_pending_output)
+	_pending_output.clear()
+	_pending_output_chars = 0
+	_output_flush_elapsed = 0.0
+	terminal_panel.append_output(text)
 
 func _on_state_changed(running: bool, message: String) -> void:
 	if _active:
+		if not running:
+			_flush_output()
 		terminal_panel.set_running(running, message)
 
 func _on_finished(exit_code: int, stopped: bool) -> void:
 	if _active:
+		_flush_output()
 		terminal_panel.show_finished(exit_code, stopped)

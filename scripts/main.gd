@@ -4,6 +4,7 @@ const AppControllerScript = preload("res://scripts/app/app_controller.gd")
 const RuntimeCoordinatorScript = preload("res://scripts/app/runtime_coordinator.gd")
 const SubscriptionCoordinatorScript = preload("res://scripts/app/subscription_coordinator.gd")
 const SettingsCoordinatorScript = preload("res://scripts/app/settings_coordinator.gd")
+const PortConflictCoordinatorScript = preload("res://scripts/app/port_conflict_coordinator.gd")
 const NodeRuntimeCoordinatorScript = preload("res://scripts/app/node_runtime_coordinator.gd")
 const NodeFailoverCoordinatorScript = preload("res://scripts/app/node_failover_coordinator.gd")
 const RoutingCoordinatorScript = preload("res://scripts/app/routing_coordinator.gd")
@@ -35,6 +36,7 @@ var app: AppController
 var runtime: RuntimeCoordinator
 var subscription_coordinator: SubscriptionCoordinator
 var settings_coordinator: SettingsCoordinator
+var port_conflict_coordinator: PortConflictCoordinator
 var node_runtime_coordinator: NodeRuntimeCoordinator
 var node_failover_coordinator: NodeFailoverCoordinator
 var routing_coordinator: RoutingCoordinator
@@ -59,6 +61,7 @@ var subscription_service
 var autostart_service
 var command_console_service
 var command_preset_service
+var port_conflict_service
 var application_routing_service
 var node_failover_service
 var ui_theme_service
@@ -86,6 +89,7 @@ func _ready() -> void:
 	autostart_service = app.get_service("autostart")
 	command_console_service = app.get_service("command_console")
 	command_preset_service = app.get_service("command_presets")
+	port_conflict_service = app.get_service("port_conflict")
 	application_routing_service = app.get_service("application_routing")
 	node_failover_service = app.get_service("node_failover")
 	resident = ResidentControllerScript.new()
@@ -110,7 +114,7 @@ func _ready() -> void:
 	terminal_panel.setup(ui)
 	settings_panel = SettingsPanelScript.new()
 	add_child(settings_panel)
-	settings_panel.setup(ui, proxy_service.config, system_proxy_service.is_enabled())
+	settings_panel.setup(ui, proxy_service.config, system_proxy_service.is_enabled(), self)
 	settings_panel.log_message.connect(dashboard_panel.append_log)
 	mihomo_control.event_logged.connect(dashboard_panel.append_log)
 	core_update_service.event_logged.connect(dashboard_panel.append_log)
@@ -151,6 +155,10 @@ func _ready() -> void:
 	add_child(settings_coordinator)
 	settings_coordinator.setup(mihomo_control, core_update_service, autostart_service, proxy_service.config, settings_panel, resident)
 	settings_coordinator.start()
+	port_conflict_coordinator = PortConflictCoordinatorScript.new()
+	add_child(port_conflict_coordinator)
+	port_conflict_coordinator.setup(port_conflict_service, settings_panel, mihomo_control)
+	port_conflict_coordinator.start()
 	node_runtime_coordinator = NodeRuntimeCoordinatorScript.new()
 	add_child(node_runtime_coordinator)
 	node_runtime_coordinator.setup(mihomo_control, dashboard_panel, nodes_panel, resident)
@@ -187,6 +195,8 @@ func _quit_application() -> void:
 		terminal_coordinator.shutdown()
 	if settings_coordinator:
 		settings_coordinator.shutdown()
+	if port_conflict_coordinator:
+		port_conflict_coordinator.shutdown()
 	if node_runtime_coordinator:
 		node_runtime_coordinator.shutdown()
 	if node_failover_coordinator:

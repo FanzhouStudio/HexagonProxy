@@ -16,9 +16,13 @@ var process_id := -1
 var _working_directory := ""
 var _output_path := ""
 var _script_paths: Array[String] = []
-var _last_output := ""
+var _output_offset := 0
+var _poll_accumulator := 0.0
 var _stopped_by_user := false
 var _exit_detected_msec := 0
+
+const OUTPUT_POLL_INTERVAL_SEC := 0.08
+const MAX_READ_BYTES_PER_POLL := 131072
 
 func bind_config(config) -> void:
 	proxy_config = config
@@ -67,7 +71,8 @@ func run_command(shell_name: String, command: String) -> bool:
 		return false
 	_ensure_console_dir()
 	_cleanup_files()
-	_last_output = ""
+	_output_offset = 0
+	_poll_accumulator = 0.0
 	_stopped_by_user = false
 	_exit_detected_msec = 0
 	var token := str(Time.get_ticks_usec())
@@ -97,17 +102,23 @@ func stop() -> void:
 	else:
 		OS.kill(process_id)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if process_id <= 0:
 		return
-	_poll_output()
-	if OS.is_process_running(process_id):
+	var running := OS.is_process_running(process_id)
+	_poll_accumulator += delta
+	if _poll_accumulator >= OUTPUT_POLL_INTERVAL_SEC:
+		_poll_accumulator = 0.0
+		_poll_output(not running)
+	if running:
 		_exit_detected_msec = 0
 		return
 	if _exit_detected_msec == 0:
 		_exit_detected_msec = Time.get_ticks_msec()
 		return
 	if Time.get_ticks_msec() - _exit_detected_msec < 180:
+		return
+	if _has_unread_output():
 		return
 	_finish_process()
 func _prepare_launch(shell_name: String, command: String, token: String, work_dir: String) -> Dictionary:
@@ -131,16 +142,65 @@ func _prepare_launch(shell_name: String, command: String, token: String, work_di
 	var encoded := Marshalls.raw_to_base64(script.to_utf16_buffer())
 	_script_paths.clear()
 	return {"ok": true, "executable": "powershell.exe", "args": PackedStringArray(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded])}
-func _poll_output() -> void:
+func _poll_output(final_chunk := false) -> void:
 	if _output_path.is_empty() or not FileAccess.file_exists(_output_path):
 		return
-	var content := FileAccess.get_file_as_string(_output_path)
-	if content == _last_output:
+	var file := FileAccess.open(_output_path, FileAccess.READ)
+	if file == null:
 		return
-	var chunk := content.substr(_last_output.length()) if content.begins_with(_last_output) else content
-	_last_output = content
+	var length := file.get_length()
+	if length < _output_offset:
+		_output_offset = 0
+	var available := length - _output_offset
+	if available <= 0:
+		file.close()
+		return
+	var read_size := mini(available, MAX_READ_BYTES_PER_POLL)
+	file.seek(_output_offset)
+	var bytes := file.get_buffer(read_size)
+	file.close()
+	var safe_size := _utf8_complete_prefix_size(bytes)
+	if safe_size <= 0:
+		if final_chunk:
+			_output_offset += bytes.size()
+		return
+	if safe_size < bytes.size():
+		bytes = bytes.slice(0, safe_size)
+	_output_offset += safe_size
+	var chunk := bytes.get_string_from_utf8()
+	if _output_offset == safe_size and chunk.begins_with(String.chr(0xfeff)):
+		chunk = chunk.trim_prefix(String.chr(0xfeff))
 	if not chunk.is_empty():
 		output_appended.emit(chunk)
+
+func _utf8_complete_prefix_size(bytes: PackedByteArray) -> int:
+	var size := bytes.size()
+	if size <= 0:
+		return 0
+	var start := maxi(0, size - 4)
+	for index in range(size - 1, start - 1, -1):
+		var value := int(bytes[index])
+		if (value & 0xc0) == 0x80:
+			continue
+		var expected := 1
+		if value >= 0xc2 and value <= 0xdf:
+			expected = 2
+		elif value >= 0xe0 and value <= 0xef:
+			expected = 3
+		elif value >= 0xf0 and value <= 0xf4:
+			expected = 4
+		return index if size - index < expected else size
+	return size
+
+func _has_unread_output() -> bool:
+	if _output_path.is_empty() or not FileAccess.file_exists(_output_path):
+		return false
+	var file := FileAccess.open(_output_path, FileAccess.READ)
+	if file == null:
+		return false
+	var unread := file.get_length() > _output_offset
+	file.close()
+	return unread
 
 func _finish_process() -> void:
 	_poll_output()

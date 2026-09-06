@@ -4,22 +4,9 @@ extends RefCounted
 ## HexagonProxy生成配置模板
 ## 集中维护固定路由规则、rule provider 与基础订阅 YAML
 
-const GENERATED_ROUTING_RULES := """rules:
-  - DOMAIN,localhost,DIRECT
-  - DOMAIN-SUFFIX,localhost,DIRECT
-  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
-  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
-  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
-  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
-  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
-  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
-  - IP-CIDR6,::1/128,DIRECT,no-resolve
-  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
-  - IP-CIDR6,fe80::/10,DIRECT,no-resolve
-  - RULE-SET,hexagon-cn-domain,DIRECT
-  - RULE-SET,hexagon-cn-ip,DIRECT,no-resolve
-  - MATCH,六角选择
-"""
+const LocalNetworkCatalogScript = preload("res://scripts/modules/network/local_network_catalog.gd")
+
+var local_network_catalog = LocalNetworkCatalogScript.new()
 
 const GENERATED_RULE_PROVIDERS := """rule-providers:
   hexagon-cn-domain:
@@ -73,7 +60,7 @@ proxy-groups:
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 80
-%s""" % [GENERATED_RULE_PROVIDERS, escaped, GENERATED_ROUTING_RULES]
+%s""" % [GENERATED_RULE_PROVIDERS, escaped, generated_routing_rules()]
 
 func default_profile_yaml() -> String:
 	return """# HexagonProxy默认直连配置
@@ -91,17 +78,23 @@ proxy-groups:
     type: select
     proxies:
       - DIRECT
-%s""" % [GENERATED_RULE_PROVIDERS, GENERATED_ROUTING_RULES]
+%s""" % [GENERATED_RULE_PROVIDERS, generated_routing_rules()]
 
 func v2_profile_yaml(parser, provider_name: String, hy2_provider_name := "") -> String:
 	return parser.v2_profile_yaml(
 		provider_name,
 		hy2_provider_name,
 		GENERATED_RULE_PROVIDERS,
-		GENERATED_ROUTING_RULES
+		generated_routing_rules()
 	)
+
 func generated_routing_rules() -> String:
-	return GENERATED_ROUTING_RULES
+	var lines := PackedStringArray(["rules:"])
+	lines.append_array(local_network_catalog.mihomo_direct_rules())
+	lines.append("  - RULE-SET,hexagon-cn-domain,DIRECT")
+	lines.append("  - RULE-SET,hexagon-cn-ip,DIRECT,no-resolve")
+	lines.append("  - MATCH,六角选择")
+	return "\n".join(lines) + "\n"
 
 func generated_rule_providers() -> String:
 	return GENERATED_RULE_PROVIDERS

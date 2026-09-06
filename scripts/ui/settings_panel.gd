@@ -4,6 +4,8 @@ extends Node
 signal system_proxy_intent_changed(enabled: bool)
 signal ports_apply_requested(mixed_port: int, controller_port: int)
 signal port_random_requested(kind: String)
+signal port_release_requested(kind: String, port: int)
+signal port_release_confirmed(port: int, pids: PackedInt32Array)
 signal core_restart_requested
 signal core_update_requested
 signal ui_theme_requested(theme_id: String)
@@ -18,9 +20,11 @@ const GREEN := Color("16866f")
 const GREEN_DARK := Color("c5f1dfde")
 const YELLOW := Color("b87918")
 const RED := Color("c84d68")
+const ConfirmationPromptScript = preload("res://scripts/ui/confirmation_prompt.gd")
 
 var ui: UiFactory
 var proxy_config
+var _prompt_host: Control
 var _system_proxy_enabled := false
 var proxy_toggle: CheckButton
 var mixed_port_spin: SpinBox
@@ -36,9 +40,10 @@ var core_progress_label: Label
 var theme_selector: OptionButton
 var theme_description_label: Label
 var theme_message_label: Label
-func setup(factory: UiFactory, config, system_proxy_enabled: bool) -> void:
+func setup(factory: UiFactory, config, system_proxy_enabled: bool, prompt_host: Control = null) -> void:
 	ui = factory
 	proxy_config = config
+	_prompt_host = prompt_host
 	_system_proxy_enabled = system_proxy_enabled
 
 func build() -> Control:
@@ -151,6 +156,10 @@ func _build_behavior_card() -> PanelContainer:
 	var random_mixed := ui.small_choice_button("随机")
 	random_mixed.pressed.connect(func() -> void: port_random_requested.emit("mixed"))
 	port_row.add_child(random_mixed)
+	var release_mixed := ui.small_choice_button("释放占用", ui.danger_color)
+	release_mixed.tooltip_text = "检测并结束占用该端口的非系统进程"
+	release_mixed.pressed.connect(func() -> void: _request_port_release("mixed"))
+	port_row.add_child(release_mixed)
 	var api_row := HBoxContainer.new()
 	api_row.add_theme_constant_override("separation", 8)
 	column.add_child(api_row)
@@ -163,6 +172,10 @@ func _build_behavior_card() -> PanelContainer:
 	var random_controller := ui.small_choice_button("随机")
 	random_controller.pressed.connect(func() -> void: port_random_requested.emit("controller"))
 	api_row.add_child(random_controller)
+	var release_controller := ui.small_choice_button("释放占用", ui.danger_color)
+	release_controller.tooltip_text = "检测并结束占用该端口的非系统进程"
+	release_controller.pressed.connect(func() -> void: _request_port_release("controller"))
+	api_row.add_child(release_controller)
 	var save_ports := ui.small_choice_button("保存端口")
 	save_ports.pressed.connect(_request_ports_apply)
 	api_row.add_child(save_ports)
@@ -244,6 +257,40 @@ func show_theme_message(message: String, success: bool) -> void:
 func _on_theme_selected(index: int) -> void:
 	if is_instance_valid(theme_selector) and index >= 0 and index < theme_selector.item_count:
 		ui_theme_requested.emit(str(theme_selector.get_item_metadata(index)))
+
+func _request_port_release(kind: String) -> void:
+	var spin := mixed_port_spin if kind == "mixed" else controller_port_spin
+	if not is_instance_valid(spin):
+		return
+	port_release_requested.emit(kind, int(spin.value))
+
+func show_port_release_confirmation(port: int, processes: Array) -> void:
+	var host: Control = _prompt_host
+	if not is_instance_valid(host):
+		return
+	var existing := host.get_node_or_null("PortReleasePrompt")
+	if is_instance_valid(existing):
+		existing.queue_free()
+	var lines := PackedStringArray()
+	var pids := PackedInt32Array()
+	for process in processes:
+		if process is Dictionary:
+			var pid := int(process.get("pid", -1))
+			var name := str(process.get("name", "Unknown"))
+			if pid > 0:
+				pids.append(pid)
+				lines.append("• %s (PID %d)" % [name, pid])
+	var prompt = ConfirmationPromptScript.new()
+	prompt.name = "PortReleasePrompt"
+	host.add_child(prompt)
+	prompt.setup(
+		ui,
+		"释放端口 %d？" % port,
+		"将强制结束以下占用进程：\n%s\n\n仅在确认这些进程可以安全关闭时继续。" % "\n".join(lines),
+		"结束进程并释放",
+		true
+	)
+	prompt.confirmed.connect(func() -> void: port_release_confirmed.emit(port, pids))
 
 func _request_ports_apply() -> void:
 	if not is_instance_valid(mixed_port_spin) or not is_instance_valid(controller_port_spin):

@@ -18,6 +18,8 @@ const GREEN_DARK := Color("c5f1dfde")
 const CONSOLE_BG := Color("102a35e8")
 const CONSOLE_BORDER := Color("75cdb4b0")
 const CONSOLE_TEXT := Color("d9fff3")
+const MAX_OUTPUT_CHARS := 750000
+const OUTPUT_TRIM_MESSAGE := "[系统] 输出较多，已自动清理较早内容以保持终端流畅。\n"
 
 var ui: UiFactory
 var shell_selector: OptionButton
@@ -37,6 +39,7 @@ var preset_command_edit: TextEdit
 var preset_delete_dialog: ConfirmationDialog
 var _editing_preset_id := ""
 var _pending_delete_id := ""
+var _output_char_count := 0
 var run_button: Button
 var stop_button: Button
 
@@ -169,6 +172,7 @@ func _build_output_card() -> PanelContainer:
 	output_view.selection_enabled = true
 	output_view.context_menu_enabled = true
 	output_view.scroll_active = true
+	output_view.scroll_following = true
 	output_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	ui.apply_console_theme(output_view, 12)
 	column.add_child(output_view)
@@ -335,12 +339,22 @@ func _on_run_pressed() -> void:
 func append_output(text: String) -> void:
 	if not is_instance_valid(output_view) or text.is_empty():
 		return
-	output_view.append_text(text)
-	output_view.scroll_to_line(maxi(output_view.get_line_count() - 1, 0))
+	var chunk := text
+	if _output_char_count + chunk.length() > MAX_OUTPUT_CHARS:
+		output_view.clear()
+		_output_char_count = 0
+		output_view.append_text(OUTPUT_TRIM_MESSAGE)
+		_output_char_count += OUTPUT_TRIM_MESSAGE.length()
+		var budget := MAX_OUTPUT_CHARS - _output_char_count
+		if chunk.length() > budget:
+			chunk = chunk.right(budget)
+	output_view.append_text(chunk)
+	_output_char_count += chunk.length()
 
 func clear_output() -> void:
 	if is_instance_valid(output_view):
 		output_view.clear()
+		_output_char_count = 0
 
 func set_running(running: bool, message: String) -> void:
 	if is_instance_valid(run_button):
