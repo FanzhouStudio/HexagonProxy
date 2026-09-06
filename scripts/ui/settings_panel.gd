@@ -196,12 +196,15 @@ func _build_behavior_card() -> PanelContainer:
 	port_row.add_theme_constant_override("separation", 8)
 	column.add_child(port_row)
 	var port_label := ui.label("本地混合端口", 13, TEXT)
-	port_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	port_label.custom_minimum_size.x = 90
+	port_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	port_label.custom_minimum_size.x = 120
 	port_row.add_child(port_label)
 	mixed_port_spin = _create_port_spin(proxy_config.mixed_port())
 	mixed_port_spin.custom_minimum_size.x = 90
 	port_row.add_child(mixed_port_spin)
+	var mixed_spacer := Control.new()
+	mixed_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	port_row.add_child(mixed_spacer)
 	var random_mixed := ui.small_choice_button("随机")
 	random_mixed.pressed.connect(func() -> void: port_random_requested.emit("mixed"))
 	port_row.add_child(random_mixed)
@@ -209,13 +212,19 @@ func _build_behavior_card() -> PanelContainer:
 	release_mixed.tooltip_text = "检测并结束占用该端口的非系统进程"
 	release_mixed.pressed.connect(func() -> void: _request_port_release("mixed"))
 	port_row.add_child(release_mixed)
-	column.add_child(ui.label("本地控制接口 · 127.0.0.1", 13, TEXT))
+	var api_title := ui.label("本地控制接口 · 127.0.0.1", 13, TEXT)
+	api_title.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	api_title.custom_minimum_size.x = 120
+	column.add_child(api_title)
 	var api_row := HBoxContainer.new()
 	api_row.add_theme_constant_override("separation", 8)
 	column.add_child(api_row)
 	controller_port_spin = _create_port_spin(proxy_config.controller_port())
 	controller_port_spin.custom_minimum_size.x = 90
 	api_row.add_child(controller_port_spin)
+	var api_spacer := Control.new()
+	api_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	api_row.add_child(api_spacer)
 	var random_controller := ui.small_choice_button("随机")
 	random_controller.pressed.connect(func() -> void: port_random_requested.emit("controller"))
 	api_row.add_child(random_controller)
