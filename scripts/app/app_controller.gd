@@ -18,6 +18,7 @@ const PortConflictServiceScript = preload("res://scripts/modules/system/port_con
 const ApplicationRoutingServiceScript = preload("res://scripts/modules/routing/application_routing_service.gd")
 const NodeFailoverServiceScript = preload("res://scripts/modules/reliability/node_failover_service.gd")
 const UiThemeServiceScript = preload("res://scripts/modules/ui/ui_theme_service.gd")
+const CodexProfileServiceScript = preload("res://scripts/modules/codex/codex_profile_service.gd")
 
 var service_container
 
@@ -41,6 +42,7 @@ func start() -> void:
 	var application_routing = ApplicationRoutingServiceScript.new()
 	var node_failover = NodeFailoverServiceScript.new()
 	var ui_theme = UiThemeServiceScript.new()
+	var codex_profiles = CodexProfileServiceScript.new()
 	core_update.bind_config(proxy_config)
 	subscription.bind_config(proxy_config)
 	system_proxy.bind_config(proxy_config)
@@ -63,6 +65,7 @@ func start() -> void:
 	service_container.register("application_routing", application_routing)
 	service_container.register("node_failover", node_failover)
 	service_container.register("ui_theme", ui_theme)
+	service_container.register("codex_profiles", codex_profiles)
 	service_container.initialize_all()
 	autostart.migrate_legacy_registration()
 

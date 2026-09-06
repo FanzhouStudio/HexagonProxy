@@ -21,6 +21,7 @@ var nodes_panel: NodesPanel
 var subscription_panel: SubscriptionPanel
 var routing_panel: RoutingPanel
 var terminal_panel: TerminalPanel
+var codex_accounts_panel: CodexAccountsPanel
 var settings_panel: SettingsPanel
 var page_host: Control
 var pages := {}
@@ -28,8 +29,9 @@ var nav_buttons := {}
 var window_action_buttons := {}
 var page_title: Label
 var aquarium_background: Control
+var _current_page := ""
 
-func setup(owner: Control, factory: UiFactory, dashboard: DashboardPanel, nodes: NodesPanel, subscription: SubscriptionPanel, routing: RoutingPanel, terminal: TerminalPanel, settings: SettingsPanel) -> void:
+func setup(owner: Control, factory: UiFactory, dashboard: DashboardPanel, nodes: NodesPanel, subscription: SubscriptionPanel, routing: RoutingPanel, terminal: TerminalPanel, codex_accounts: CodexAccountsPanel, settings: SettingsPanel) -> void:
 	host = owner
 	ui = factory
 	dashboard_panel = dashboard
@@ -37,6 +39,7 @@ func setup(owner: Control, factory: UiFactory, dashboard: DashboardPanel, nodes:
 	subscription_panel = subscription
 	routing_panel = routing
 	terminal_panel = terminal
+	codex_accounts_panel = codex_accounts
 	settings_panel = settings
 
 func build(profile_name: String) -> void:
@@ -74,6 +77,7 @@ func build(profile_name: String) -> void:
 	_add_nav(side, "subscription", "↻  订阅")
 	_add_nav(side, "routing", "⇄  分流")
 	_add_nav(side, "terminal", ">_  终端")
+	_add_nav(side, "codex", "◈  Codex 账号")
 	_add_nav(side, "settings", "⚙  设置")
 	var side_spacer := Control.new()
 	side_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -95,22 +99,29 @@ func build(profile_name: String) -> void:
 	pages["subscription"] = subscription_panel.build()
 	pages["routing"] = routing_panel.build()
 	pages["terminal"] = terminal_panel.build()
+	pages["codex"] = codex_accounts_panel.build()
 	pages["settings"] = settings_panel.build()
 	for page in pages.values():
 		page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		page_host.add_child(page)
 
 func show_page(page_id: String) -> void:
+	if _current_page == page_id:
+		return
+	_current_page = page_id
 	var titles := {
 		"dashboard": "网络总览",
 		"nodes": "节点路线",
 		"subscription": "订阅管理",
 		"routing": "应用分流",
 		"terminal": "内置终端",
+		"codex": "Codex 账号",
 		"settings": "偏好设置"
 	}
 	for page_name in pages:
 		pages[page_name].visible = page_name == page_id
+	if is_instance_valid(dashboard_panel):
+		dashboard_panel.set_dashboard_active(page_id == 'dashboard')
 	for nav_name in nav_buttons:
 		var active: bool = str(nav_name) == page_id
 		var button: Button = nav_buttons[nav_name]

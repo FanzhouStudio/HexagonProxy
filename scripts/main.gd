@@ -9,6 +9,7 @@ const NodeRuntimeCoordinatorScript = preload("res://scripts/app/node_runtime_coo
 const NodeFailoverCoordinatorScript = preload("res://scripts/app/node_failover_coordinator.gd")
 const RoutingCoordinatorScript = preload("res://scripts/app/routing_coordinator.gd")
 const TerminalCoordinatorScript = preload("res://scripts/app/terminal_coordinator.gd")
+const CodexProfileCoordinatorScript = preload("res://scripts/app/codex_profile_coordinator.gd")
 const WindowModeControllerScript = preload("res://scripts/app/window_mode_controller.gd")
 const WindowChromeCoordinatorScript = preload("res://scripts/app/window_chrome_coordinator.gd")
 const UiThemeCoordinatorScript = preload("res://scripts/app/ui_theme_coordinator.gd")
@@ -20,6 +21,7 @@ const NodesPanelScript = preload("res://scripts/ui/nodes_panel.gd")
 const DashboardPanelScript = preload("res://scripts/ui/dashboard_panel.gd")
 const RoutingPanelScript = preload("res://scripts/ui/routing_panel.gd")
 const TerminalPanelScript = preload("res://scripts/ui/terminal_panel.gd")
+const CodexAccountsPanelScript = preload("res://scripts/ui/codex_accounts_panel.gd")
 const SettingsPanelScript = preload("res://scripts/ui/settings_panel.gd")
 const AppShellScript = preload("res://scripts/ui/app_shell.gd")
 
@@ -41,6 +43,7 @@ var node_runtime_coordinator: NodeRuntimeCoordinator
 var node_failover_coordinator: NodeFailoverCoordinator
 var routing_coordinator: RoutingCoordinator
 var terminal_coordinator: TerminalCoordinator
+var codex_profile_coordinator: CodexProfileCoordinator
 var window_mode_controller: WindowModeController
 var window_chrome_coordinator: WindowChromeCoordinator
 var ui_theme_coordinator: UiThemeCoordinator
@@ -51,6 +54,7 @@ var nodes_panel: NodesPanel
 var dashboard_panel: DashboardPanel
 var routing_panel: RoutingPanel
 var terminal_panel: TerminalPanel
+var codex_accounts_panel: CodexAccountsPanel
 var settings_panel: SettingsPanel
 var app_shell: AppShell
 var proxy_service
@@ -65,6 +69,7 @@ var port_conflict_service
 var application_routing_service
 var node_failover_service
 var ui_theme_service
+var codex_profile_service
 var _quitting := false
 
 func _ready() -> void:
@@ -92,6 +97,7 @@ func _ready() -> void:
 	port_conflict_service = app.get_service("port_conflict")
 	application_routing_service = app.get_service("application_routing")
 	node_failover_service = app.get_service("node_failover")
+	codex_profile_service = app.get_service("codex_profiles")
 	resident = ResidentControllerScript.new()
 	add_child(resident)
 	resident.setup(self, ui, proxy_service.config, autostart_service.is_enabled())
@@ -112,6 +118,9 @@ func _ready() -> void:
 	terminal_panel = TerminalPanelScript.new()
 	add_child(terminal_panel)
 	terminal_panel.setup(ui)
+	codex_accounts_panel = CodexAccountsPanelScript.new()
+	add_child(codex_accounts_panel)
+	codex_accounts_panel.setup(ui, self)
 	settings_panel = SettingsPanelScript.new()
 	add_child(settings_panel)
 	settings_panel.setup(ui, proxy_service.config, system_proxy_service.is_enabled(), self)
@@ -124,10 +133,11 @@ func _ready() -> void:
 	command_preset_service.event_logged.connect(dashboard_panel.append_log)
 	application_routing_service.event_logged.connect(dashboard_panel.append_log)
 	node_failover_service.event_logged.connect(dashboard_panel.append_log)
+	codex_profile_service.event_logged.connect(dashboard_panel.append_log)
 	ui_theme_service.event_logged.connect(dashboard_panel.append_log)
 	app_shell = AppShellScript.new()
 	add_child(app_shell)
-	app_shell.setup(self, ui, dashboard_panel, nodes_panel, subscription_panel, routing_panel, terminal_panel, settings_panel)
+	app_shell.setup(self, ui, dashboard_panel, nodes_panel, subscription_panel, routing_panel, terminal_panel, codex_accounts_panel, settings_panel)
 	app_shell.build(subscription_service.current_profile_name)
 	ui_theme_coordinator = UiThemeCoordinatorScript.new()
 	add_child(ui_theme_coordinator)
@@ -151,6 +161,10 @@ func _ready() -> void:
 	add_child(terminal_coordinator)
 	terminal_coordinator.setup(command_console_service, command_preset_service, terminal_panel)
 	terminal_coordinator.start()
+	codex_profile_coordinator = CodexProfileCoordinatorScript.new()
+	add_child(codex_profile_coordinator)
+	codex_profile_coordinator.setup(codex_profile_service, codex_accounts_panel)
+	codex_profile_coordinator.start()
 	settings_coordinator = SettingsCoordinatorScript.new()
 	add_child(settings_coordinator)
 	settings_coordinator.setup(mihomo_control, core_update_service, autostart_service, proxy_service.config, settings_panel, resident)
@@ -193,6 +207,8 @@ func _quit_application() -> void:
 		routing_coordinator.shutdown()
 	if terminal_coordinator:
 		terminal_coordinator.shutdown()
+	if codex_profile_coordinator:
+		codex_profile_coordinator.shutdown()
 	if settings_coordinator:
 		settings_coordinator.shutdown()
 	if port_conflict_coordinator:

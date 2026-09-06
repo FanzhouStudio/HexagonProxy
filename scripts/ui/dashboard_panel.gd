@@ -32,6 +32,7 @@ var mode_buttons := {}
 var previous_download := 0.0
 var previous_upload := 0.0
 var previous_sample_msec := 0
+var _dashboard_active := true
 
 func setup(factory: UiFactory) -> void:
 	ui = factory
@@ -213,6 +214,8 @@ func append_log(message: String) -> void:
 	log_view.append_text("[color=#%s]%s[/color]  %s\n" % [ui.muted_color.to_html(false), time, message])
 	log_view.scroll_to_line(maxi(log_view.get_line_count() - 1, 0))
 func apply_connections(payload: Dictionary) -> void:
+	if not _dashboard_active:
+		return
 	var download := float(payload.get("downloadTotal", 0.0))
 	var upload := float(payload.get("uploadTotal", 0.0))
 	var now := Time.get_ticks_msec()
@@ -230,8 +233,13 @@ func apply_connections(payload: Dictionary) -> void:
 	total_label.text = _format_bytes(download + upload)
 	traffic_graph.push_sample(down_speed + up_speed)
 
-func push_zero_sample() -> void:
+func set_dashboard_active(active: bool) -> void:
+	_dashboard_active = active
 	if is_instance_valid(traffic_graph):
+		traffic_graph.visible = active
+
+func push_zero_sample() -> void:
+	if _dashboard_active and is_instance_valid(traffic_graph):
 		traffic_graph.push_sample(0.0)
 
 func _format_bytes(value: float) -> String:

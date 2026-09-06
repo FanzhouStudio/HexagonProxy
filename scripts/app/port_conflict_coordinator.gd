@@ -8,6 +8,9 @@ var port_conflict_service
 var settings_panel
 var mihomo_control
 var _active := false
+var _port_task_busy := false
+var _port_thread: Thread
+
 
 func setup(service, settings, control) -> void:
 	port_conflict_service = service
@@ -21,6 +24,9 @@ func start() -> void:
 
 func shutdown() -> void:
 	_active = false
+	if _port_thread and _port_thread.is_alive():
+		_port_thread.wait_to_finish()
+	_port_thread = null
 
 func _on_port_release_requested(_kind: String, port: int) -> void:
 	if not _active:
@@ -28,7 +34,24 @@ func _on_port_release_requested(_kind: String, port: int) -> void:
 	if _ports_locked():
 		settings_panel.show_port_message("请先断开代理，再释放端口占用。", false)
 		return
-	var result: Dictionary = port_conflict_service.inspect_port(port)
+	if _port_task_busy:
+		settings_panel.show_port_message("端口检测正在进行，请稍候。", false)
+		return
+	_port_task_busy = true
+	settings_panel.show_port_message("正在检测端口 %d…" % port, true)
+	_check_port_async(port)
+
+func _check_port_async(port: int) -> void:
+	_port_thread = Thread.new()
+	_port_thread.start(func():
+		var result: Dictionary = port_conflict_service.inspect_port(port)
+		call_deferred("_finish_port_check", result, port)
+	)
+
+func _finish_port_check(result: Dictionary, port: int) -> void:
+	_port_task_busy = false
+	if not _active:
+		return
 	if not bool(result.get("ok", false)):
 		settings_panel.show_port_message(str(result.get("message", "端口检测失败。")), false)
 		return
@@ -54,7 +77,24 @@ func _on_port_release_confirmed(port: int, pids: PackedInt32Array) -> void:
 	if _ports_locked():
 		settings_panel.show_port_message("代理状态已变化，请先断开代理再操作。", false)
 		return
-	var result: Dictionary = port_conflict_service.release_port(port, pids)
+	if _port_task_busy:
+		settings_panel.show_port_message("端口操作正在进行，请稍候。", false)
+		return
+	_port_task_busy = true
+	settings_panel.show_port_message("正在释放端口 %d…" % port, true)
+	_release_port_async(port, pids)
+
+func _release_port_async(port: int, pids: PackedInt32Array) -> void:
+	_port_thread = Thread.new()
+	_port_thread.start(func():
+		var result: Dictionary = port_conflict_service.release_port(port, pids)
+		call_deferred("_finish_port_release", result)
+	)
+
+func _finish_port_release(result: Dictionary) -> void:
+	_port_task_busy = false
+	if not _active:
+		return
 	settings_panel.show_port_message(
 		str(result.get("message", "端口释放失败。")),
 		bool(result.get("ok", false)) and bool(result.get("released", false))

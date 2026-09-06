@@ -41,7 +41,7 @@ func _run() -> void:
 		if not is_instance_valid(button) or not shell_rect.encloses(button.get_global_rect()):
 			_fail("右上角窗口按钮 %s 超出 1920x1080 可视区域" % action_id, 7)
 			return
-	for page_name in ["dashboard", "nodes", "subscription", "routing", "terminal", "settings"]:
+	for page_name in ["dashboard", "nodes", "subscription", "routing", "terminal", "codex", "settings"]:
 		shell.show_page(page_name)
 		await process_frame
 		var page: Control = shell.pages[page_name]
