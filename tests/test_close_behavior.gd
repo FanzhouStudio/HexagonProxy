@@ -23,14 +23,14 @@ func _run() -> void:
 	if prompt_count != 1:
 		_fail("重复关闭请求创建了多个选择框", 3)
 		return
-	resident._dismiss_close_prompt()
+	resident.close_prompt.cancel_requested.emit()
 	await process_frame
 	if is_instance_valid(resident.close_prompt):
-		_fail("取消后关闭选择框仍然存在", 4)
+		_fail("取消后退出确认仍然存在", 4)
 		return
 	resident._show_close_prompt()
 	await process_frame
-	resident._hide_main_to_tray()
+	resident.close_main_window()
 	await process_frame
 	if not resident.window_visibility.is_hidden():
 		_fail("最小化到托盘状态没有生效", 5)

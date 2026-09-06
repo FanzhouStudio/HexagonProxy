@@ -124,8 +124,9 @@ func button(text: String, _fill: Color, color_value: Color) -> Button:
 	_tracked_buttons.append({"node": result, "small": false, "color": color_value, "role": _semantic_role(color_value)})
 	return result
 
-func small_choice_button(text: String) -> Button:
-	var result := button(text, surface_2_color, muted_color)
+func small_choice_button(text: String, color_value: Color = Color.TRANSPARENT) -> Button:
+	var text_color_value := muted_color if color_value.a <= 0.001 else color_value
+	var result := button(text, surface_2_color, text_color_value)
 	result.custom_minimum_size = Vector2(64, 38)
 	result.add_theme_font_size_override("font_size", _scaled_font(12))
 	result.set_meta("ui_small_button", true)

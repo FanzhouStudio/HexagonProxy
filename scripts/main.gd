@@ -9,6 +9,7 @@ const NodeFailoverCoordinatorScript = preload("res://scripts/app/node_failover_c
 const RoutingCoordinatorScript = preload("res://scripts/app/routing_coordinator.gd")
 const TerminalCoordinatorScript = preload("res://scripts/app/terminal_coordinator.gd")
 const WindowModeControllerScript = preload("res://scripts/app/window_mode_controller.gd")
+const WindowChromeCoordinatorScript = preload("res://scripts/app/window_chrome_coordinator.gd")
 const UiThemeCoordinatorScript = preload("res://scripts/app/ui_theme_coordinator.gd")
 const UserDataBrandMigratorScript = preload("res://scripts/core/user_data_brand_migrator.gd")
 const UiFactoryScript = preload("res://scripts/ui/ui_factory.gd")
@@ -39,6 +40,7 @@ var node_failover_coordinator: NodeFailoverCoordinator
 var routing_coordinator: RoutingCoordinator
 var terminal_coordinator: TerminalCoordinator
 var window_mode_controller: WindowModeController
+var window_chrome_coordinator: WindowChromeCoordinator
 var ui_theme_coordinator: UiThemeCoordinator
 var ui: UiFactory
 var resident: ResidentController
@@ -129,6 +131,10 @@ func _ready() -> void:
 	ui_theme_coordinator.start()
 	resident.bind_controls(settings_panel.pet_control(), settings_panel.autostart_control())
 	resident.build()
+	window_chrome_coordinator = WindowChromeCoordinatorScript.new()
+	add_child(window_chrome_coordinator)
+	window_chrome_coordinator.setup(app_shell, window_mode_controller, resident)
+	window_chrome_coordinator.start()
 	subscription_coordinator = SubscriptionCoordinatorScript.new()
 	add_child(subscription_coordinator)
 	subscription_coordinator.setup(subscription_service, subscription_panel)
@@ -187,6 +193,8 @@ func _quit_application() -> void:
 		node_failover_coordinator.shutdown()
 	if ui_theme_coordinator:
 		ui_theme_coordinator.shutdown()
+	if window_chrome_coordinator:
+		window_chrome_coordinator.shutdown()
 	if window_mode_controller:
 		window_mode_controller.shutdown()
 	app.stop()

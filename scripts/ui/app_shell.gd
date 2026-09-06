@@ -1,7 +1,14 @@
 class_name AppShell
 extends Node
 
+signal window_action_requested(action_id: String)
+
 const AquariumBackgroundScript = preload("res://scripts/aquarium_background.gd")
+const WINDOW_ACTIONS := [
+	{"id": "minimize", "text": "最小化", "tooltip": "最小化到任务栏", "width": 84},
+	{"id": "close", "text": "关闭", "tooltip": "关闭主窗口并继续后台守护", "width": 72},
+	{"id": "exit", "text": "退出", "tooltip": "安全退出 HexagonProxy", "width": 72, "danger": true}
+]
 const MUTED := Color("527384")
 const GREEN := Color("16866f")
 const GREEN_DARK := Color("c5f1dfde")
@@ -18,6 +25,7 @@ var settings_panel: SettingsPanel
 var page_host: Control
 var pages := {}
 var nav_buttons := {}
+var window_action_buttons := {}
 var page_title: Label
 var aquarium_background: Control
 
@@ -152,6 +160,27 @@ func _build_topbar(parent: Container) -> void:
 	var status_label := ui.label("代理未连接", 13, MUTED)
 	status_row.add_child(status_label)
 	dashboard_panel.bind_status_controls(status_label, status_dot)
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 6)
+	top.add_child(action_row)
+	_build_window_actions(action_row)
+
+func _build_window_actions(parent: HBoxContainer) -> void:
+	window_action_buttons.clear()
+	for action in WINDOW_ACTIONS:
+		if not action is Dictionary:
+			continue
+		var action_id := str(action.get("id", ""))
+		var action_color := ui.danger_color if bool(action.get("danger", false)) else Color.TRANSPARENT
+		var button := ui.small_choice_button(str(action.get("text", action_id)), action_color)
+		button.custom_minimum_size = Vector2(float(action.get("width", 72)), 40)
+		button.tooltip_text = str(action.get("tooltip", ""))
+		button.pressed.connect(_on_window_action.bind(action_id))
+		parent.add_child(button)
+		window_action_buttons[action_id] = button
+
+func _on_window_action(action_id: String) -> void:
+	window_action_requested.emit(action_id)
 
 func _add_nav(parent: Container, page_name: String, text: String) -> void:
 	var button := ui.button(text, Color("f4ffffa8"), MUTED)

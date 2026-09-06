@@ -2,7 +2,10 @@ class_name WindowModeController
 extends Node
 
 ## 主窗口显示模式控制器
-## 图形环境默认进入无边框全屏；headless 环境跳过，避免影响自动化测试。
+## 图形环境默认进入无边框全屏；F11 不再切换窗口模式。
+## ESC 只发出退出提示意图，具体退出流程由 ResidentController 负责。
+
+signal exit_shortcut_requested
 
 const WINDOWED_SIZE := Vector2i(1920, 1080)
 const DEFAULT_FULLSCREEN := true
@@ -32,8 +35,10 @@ func is_fullscreen() -> bool:
 		return false
 	return target_window.mode in [Window.MODE_FULLSCREEN, Window.MODE_EXCLUSIVE_FULLSCREEN]
 
-func toggle_fullscreen() -> void:
-	set_fullscreen(not is_fullscreen())
+func minimize_window() -> void:
+	if not is_instance_valid(target_window) or DisplayServer.get_name().to_lower() == "headless":
+		return
+	target_window.mode = Window.MODE_MINIMIZED
 
 func set_fullscreen(enabled: bool) -> void:
 	if not is_instance_valid(target_window):
@@ -58,6 +63,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not _active or not event is InputEventKey:
 		return
 	var key := event as InputEventKey
-	if key.pressed and not key.echo and key.keycode == KEY_F11:
-		toggle_fullscreen()
+	if key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
+		exit_shortcut_requested.emit()
 		get_viewport().set_input_as_handled()

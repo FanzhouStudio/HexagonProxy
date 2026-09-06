@@ -35,6 +35,12 @@ func _run() -> void:
 	await create_timer(0.1).timeout
 	var shell = scene.app_shell
 	var page_host: Control = shell.page_host
+	var shell_rect: Rect2 = scene.get_global_rect()
+	for action_id in ["minimize", "close", "exit"]:
+		var button: Button = shell.window_action_buttons.get(action_id)
+		if not is_instance_valid(button) or not shell_rect.encloses(button.get_global_rect()):
+			_fail("右上角窗口按钮 %s 超出 1920x1080 可视区域" % action_id, 7)
+			return
 	for page_name in ["dashboard", "nodes", "subscription", "routing", "terminal", "settings"]:
 		shell.show_page(page_name)
 		await process_frame

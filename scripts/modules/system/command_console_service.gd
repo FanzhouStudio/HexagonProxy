@@ -126,7 +126,8 @@ func _prepare_launch(shell_name: String, command: String, token: String, work_di
 		return {"ok": false, "message": "不支持的命令行类型。"}
 	var escaped_output := _output_path.replace("'", "''")
 	var escaped_work_dir := work_dir.replace("'", "''")
-	var script := "$ProgressPreference = 'SilentlyContinue'\n$global:LASTEXITCODE = 0\nSet-Location -LiteralPath '%s'\n& {\n%s\n} *>&1 | Out-File -LiteralPath '%s' -Encoding utf8 -Width 4096\nexit $LASTEXITCODE\n" % [escaped_work_dir, command, escaped_output]
+	var utf8_prelude := "$utf8 = New-Object System.Text.UTF8Encoding($false)\n[Console]::InputEncoding = $utf8\n[Console]::OutputEncoding = $utf8\n$OutputEncoding = $utf8\nchcp.com 65001 > $null\n$env:PYTHONUTF8 = '1'\n$env:PYTHONIOENCODING = 'utf-8'\n"
+	var script := "%s$ProgressPreference = 'SilentlyContinue'\n$global:LASTEXITCODE = 0\nSet-Location -LiteralPath '%s'\n& {\n%s\n} *>&1 | Out-File -LiteralPath '%s' -Encoding utf8 -Width 4096\nexit $LASTEXITCODE\n" % [utf8_prelude, escaped_work_dir, command, escaped_output]
 	var encoded := Marshalls.raw_to_base64(script.to_utf16_buffer())
 	_script_paths.clear()
 	return {"ok": true, "executable": "powershell.exe", "args": PackedStringArray(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded])}

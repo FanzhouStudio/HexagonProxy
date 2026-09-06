@@ -14,6 +14,13 @@ func _run() -> void:
 	await create_timer(0.08).timeout
 	var shell = scene.app_shell
 	var settings = scene.settings_panel
+	if shell.window_action_buttons.size() != 3 or not shell.window_action_buttons.has("minimize") or not shell.window_action_buttons.has("close") or not shell.window_action_buttons.has("exit"):
+		_fail("右上角窗口操作按钮没有按数据目录构建", 13)
+		return
+	var exit_button: Button = shell.window_action_buttons["exit"]
+	if exit_button.get_theme_color("font_color") != scene.ui.danger_color:
+		_fail("退出按钮没有使用主题危险色", 14)
+		return
 	if scene.ui.theme_id() != "blue_healing" or settings.theme_selector.item_count < 2:
 		_fail("主界面没有加载默认主题目录", 2)
 		return
@@ -33,6 +40,9 @@ func _run() -> void:
 	await process_frame
 	if scene.ui.theme_id() != "midnight":
 		_fail("设置页主题意图没有实时切换主界面", 4)
+		return
+	if exit_button.get_theme_color("font_color") != scene.ui.danger_color:
+		_fail("夜海黑切换后退出按钮危险色没有同步更新", 15)
 		return
 	var dark_style: StyleBoxTexture = nav.get_theme_stylebox("normal") as StyleBoxTexture
 	if dark_style == null or str(dark_style.get_meta("source_path", "")).get_file() != "button_dark_normal.svg":

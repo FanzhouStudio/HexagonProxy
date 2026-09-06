@@ -10,27 +10,48 @@ func _run() -> void:
 	await process_frame
 	await create_timer(0.15).timeout
 	if DisplayServer.get_name().to_lower() == "headless":
-		printerr("FAIL: 图形窗口测试运行在 headless 模式")
-		quit(2)
+		_fail("图形窗口测试运行在 headless 模式", 2)
 		return
-	if root.mode not in [Window.MODE_FULLSCREEN, Window.MODE_EXCLUSIVE_FULLSCREEN]:
-		printerr("FAIL: 主窗口没有进入全屏模式")
-		quit(3)
+	if root.mode not in [Window.MODE_FULLSCREEN, Window.MODE_EXCLUSIVE_FULLSCREEN] or not root.borderless:
+		_fail("主窗口没有进入无边框全屏模式", 3)
 		return
-	if not root.borderless:
-		printerr("FAIL: 全屏窗口仍有系统边框")
-		quit(4)
-		return
-	scene.window_mode_controller.set_fullscreen(false)
+
+	var f11 := InputEventKey.new()
+	f11.keycode = KEY_F11
+	f11.pressed = true
+	scene.window_mode_controller._unhandled_key_input(f11)
 	await process_frame
-	await create_timer(0.1).timeout
-	if root.mode != Window.MODE_WINDOWED or root.size != Vector2i(1920, 1080) or root.borderless:
-		printerr("FAIL: F11 窗口模式不是 1920x1080 普通窗口：%s" % root.size)
-		quit(5)
+	if root.mode not in [Window.MODE_FULLSCREEN, Window.MODE_EXCLUSIVE_FULLSCREEN]:
+		_fail("F11 仍然改变了全屏状态", 4)
+		return
+	scene.app_shell.window_action_requested.emit("minimize")
+	await process_frame
+	await create_timer(0.08).timeout
+	if root.mode != Window.MODE_MINIMIZED:
+		_fail("右上角最小化没有进入最小化状态", 5)
 		return
 	scene.window_mode_controller.set_fullscreen(true)
 	await process_frame
-	print("PASS: 默认无边框全屏 · F11 恢复 1920x1080 窗口")
+
+	var escape := InputEventKey.new()
+	escape.keycode = KEY_ESCAPE
+	escape.pressed = true
+	scene.window_mode_controller._unhandled_key_input(escape)
+	await process_frame
+	if not is_instance_valid(scene.resident.close_prompt):
+		_fail("ESC 没有打开退出确认", 6)
+		return
+	scene.window_mode_controller._unhandled_key_input(escape)
+	await process_frame
+	if is_instance_valid(scene.resident.close_prompt):
+		_fail("第二次 ESC 没有关闭退出确认", 7)
+		return
+
+	print("PASS: 默认无边框全屏 · F11 禁用 · 顶栏最小化 · ESC 退出确认")
 	scene.queue_free()
 	await process_frame
 	quit(0)
+
+func _fail(message: String, code: int) -> void:
+	printerr("FAIL: %s" % message)
+	quit(code)

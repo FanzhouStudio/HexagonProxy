@@ -89,9 +89,25 @@ func _on_tray_connect_requested(enabled: bool) -> void:
 	connect_requested.emit(enabled)
 
 func request_close() -> void:
+	request_exit()
+
+func request_exit() -> void:
 	if quitting or is_instance_valid(close_prompt):
 		return
 	_show_close_prompt()
+
+func toggle_exit_prompt() -> void:
+	if quitting:
+		return
+	if is_instance_valid(close_prompt):
+		_dismiss_close_prompt()
+		return
+	_show_close_prompt()
+
+func close_main_window() -> void:
+	if quitting:
+		return
+	_hide_main_to_tray()
 
 func start_in_tray() -> void:
 	_hide_main_to_tray()
@@ -160,6 +176,7 @@ func quit() -> void:
 	if quitting:
 		return
 	quitting = true
+	_dismiss_close_prompt()
 	_save_settings()
 	if tray_controller:
 		tray_controller.hide_indicator()
@@ -173,5 +190,6 @@ func _show_close_prompt() -> void:
 	host.add_child(prompt)
 	close_prompt = prompt
 	prompt.setup(ui)
+	prompt.cancel_requested.connect(_dismiss_close_prompt)
 	prompt.tray_requested.connect(_hide_main_to_tray)
 	prompt.exit_requested.connect(quit)

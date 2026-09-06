@@ -46,6 +46,30 @@ func _run() -> void:
 
 	output = ""
 	finish_events.clear()
+	var native_utf8 := "& cmd.exe /D /S /C \"chcp 65001 >nul & echo native-utf8-终端-连接安全\""
+	if not service.run_command("powershell", native_utf8):
+		_fail("PowerShell 原生 UTF-8 子进程无法启动", 13)
+		return
+	if not await _wait_for_finish(5.0):
+		_fail("PowerShell 原生 UTF-8 子进程执行超时", 14)
+		return
+	if not output.contains("native-utf8-终端-连接安全"):
+		_fail("PowerShell 原生进程中文输出乱码；实际输出=%s" % output.replace("\n", "\\n"), 15)
+		return
+
+	var node_lookup: Array = []
+	if OS.execute("where.exe", PackedStringArray(["node.exe"]), node_lookup, true, false) == 0:
+		output = ""
+		finish_events.clear()
+		if not service.run_command("powershell", "node -e \"console.log('node-native-终端-连接安全')\""):
+			_fail("Node UTF-8 子进程无法启动", 16)
+			return
+		if not await _wait_for_finish(5.0) or not output.contains("node-native-终端-连接安全"):
+			_fail("Node 原生 UTF-8 输出乱码；实际输出=%s" % output.replace("\n", "\\n"), 17)
+			return
+
+	output = ""
+	finish_events.clear()
 	if not service.run_command("cmd", "cd & echo hexagon-cmd-test"):
 		_fail("CMD 命令无法启动", 5)
 		return
