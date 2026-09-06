@@ -22,6 +22,7 @@ const GREEN_DARK := Color("c5f1dfde")
 const YELLOW := Color("b87918")
 const RED := Color("c84d68")
 const ConfirmationPromptScript = preload("res://scripts/ui/confirmation_prompt.gd")
+const WINDOW_RESOLUTIONS := [Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(2560, 1440)]
 
 var ui: UiFactory
 var proxy_config
@@ -50,12 +51,16 @@ func setup(factory: UiFactory, config, system_proxy_enabled: bool, prompt_host: 
 	_system_proxy_enabled = system_proxy_enabled
 
 func build() -> Control:
-	var page := VBoxContainer.new()
-	page.add_theme_constant_override("separation", 14)
-	page.add_child(_build_appearance_card())
-	page.add_child(_build_window_card())
-	page.add_child(_build_core_card())
-	page.add_child(_build_behavior_card())
+	var page := GridContainer.new()
+	page.columns = 2
+	page.add_theme_constant_override("h_separation", 14)
+	page.add_theme_constant_override("v_separation", 14)
+	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	for card in [_build_appearance_card(), _build_window_card(), _build_core_card(), _build_behavior_card()]:
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_vertical = Control.SIZE_FILL
+		page.add_child(card)
 	return page
 
 func pet_control() -> CheckButton:
@@ -109,14 +114,19 @@ func _build_window_card() -> PanelContainer:
 	column.add_child(row)
 	row.add_child(ui.label("窗口分辨率", 13, TEXT))
 	window_resolution_selector = OptionButton.new()
-	for size in ["1280 x 720", "1600 x 900", "1920 x 1080", "2560 x 1440"]:
-		window_resolution_selector.add_item(size)
+	ui.apply_crystal_option_theme(window_resolution_selector)
+	var saved_size: Vector2i = proxy_config.window_size() if proxy_config.has_method("window_size") else Vector2i(1920, 1080)
+	for index in WINDOW_RESOLUTIONS.size():
+		var size: Vector2i = WINDOW_RESOLUTIONS[index]
+		window_resolution_selector.add_item("%d x %d" % [size.x, size.y])
+		if size == saved_size:
+			window_resolution_selector.select(index)
 	row.add_child(window_resolution_selector)
 	var apply := ui.small_choice_button("应用窗口")
 	apply.pressed.connect(func() -> void:
-		var values := [Vector2i(1280,720), Vector2i(1600,900), Vector2i(1920,1080), Vector2i(2560,1440)]
 		var index := window_resolution_selector.selected
-		window_settings_apply_requested.emit(window_borderless_toggle.button_pressed, values[index].x, values[index].y)
+		var size: Vector2i = WINDOW_RESOLUTIONS[index]
+		window_settings_apply_requested.emit(window_borderless_toggle.button_pressed, size.x, size.y)
 	)
 	row.add_child(apply)
 	return card
@@ -159,10 +169,10 @@ func _build_core_card() -> PanelContainer:
 func _build_behavior_card() -> PanelContainer:
 	var card := ui.panel(SURFACE, BORDER, 20)
 	card.custom_minimum_size.y = 360
-	var content_margin := ui.margin(22, 18, 22, 18)
+	var content_margin := ui.margin(14, 12, 14, 12)
 	card.add_child(content_margin)
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
+	column.add_theme_constant_override("separation", 8)
 	content_margin.add_child(column)
 	column.add_child(ui.label("连接设置", 18, TEXT))
 	var proxy_row := HBoxContainer.new()
@@ -194,13 +204,10 @@ func _build_behavior_card() -> PanelContainer:
 	release_mixed.tooltip_text = "检测并结束占用该端口的非系统进程"
 	release_mixed.pressed.connect(func() -> void: _request_port_release("mixed"))
 	port_row.add_child(release_mixed)
+	column.add_child(ui.label("本地控制接口 · 127.0.0.1", 13, TEXT))
 	var api_row := HBoxContainer.new()
 	api_row.add_theme_constant_override("separation", 8)
 	column.add_child(api_row)
-	var api_label := ui.label("本地控制接口", 13, TEXT)
-	api_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	api_row.add_child(api_label)
-	api_row.add_child(ui.label("127.0.0.1 :", 12, MUTED))
 	controller_port_spin = _create_port_spin(proxy_config.controller_port())
 	api_row.add_child(controller_port_spin)
 	var random_controller := ui.small_choice_button("随机")

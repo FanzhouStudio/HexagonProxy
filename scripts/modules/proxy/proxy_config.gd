@@ -125,12 +125,14 @@ func _load_ports() -> void:
 
 func _save_ports() -> void:
 	var settings := ConfigFile.new()
+	settings.load(SETTINGS_PATH)
 	settings.set_value("network", "mixed_port", _mixed_port)
 	settings.set_value("network", "controller_port", _controller_port)
 	settings.save(SETTINGS_PATH)
 
 func _save_window_settings() -> void:
 	var settings := ConfigFile.new()
+	settings.load(SETTINGS_PATH)
 	settings.set_value("window", "borderless", _window_borderless)
 	settings.set_value("window", "width", _window_width)
 	settings.set_value("window", "height", _window_height)

@@ -12,10 +12,14 @@ const DEFAULT_WINDOW_SIZE := Vector2i(1920, 1080)
 var target_window: Window
 var proxy_config
 var _active := false
+var _restore_borderless_after_minimize := false
 
 func setup(window: Window, config = null) -> void:
 	target_window = window
 	proxy_config = config
+	var focus_callback := Callable(self, "_on_window_focus_entered")
+	if not target_window.focus_entered.is_connected(focus_callback):
+		target_window.focus_entered.connect(focus_callback)
 
 func start() -> void:
 	_active = true
@@ -55,9 +59,16 @@ func minimize_window() -> void:
 	# 避免无边框全屏窗口直接切换 MINIMIZED 导致 Windows 重建窗口表面产生闪屏。
 	# 先恢复窗口焦点状态，再交给系统最小化。
 	if target_window.mode == Window.MODE_FULLSCREEN:
+		_restore_borderless_after_minimize = _is_borderless()
 		target_window.mode = Window.MODE_WINDOWED
 		await get_tree().process_frame
 	target_window.mode = Window.MODE_MINIMIZED
+
+func _on_window_focus_entered() -> void:
+	if not _restore_borderless_after_minimize:
+		return
+	_restore_borderless_after_minimize = false
+	call_deferred("apply_saved_window_mode")
 
 func set_fullscreen(enabled: bool) -> void:
 	if not is_instance_valid(target_window):
@@ -68,6 +79,8 @@ func set_fullscreen(enabled: bool) -> void:
 		return
 	target_window.mode = Window.MODE_WINDOWED
 	target_window.borderless = false
+	# 有边框窗口设置的是客户端区域尺寸，避免 Windows 标题栏和边框造成内容裁剪。
+	# 不使用滚动容器，保持完整 UI 缩放布局。
 	target_window.size = _window_size()
 	call_deferred("_center_window")
 
