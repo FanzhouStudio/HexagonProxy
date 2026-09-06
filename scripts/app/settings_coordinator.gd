@@ -10,18 +10,21 @@ var autostart_service
 var proxy_config
 var settings_panel
 var resident
+var window_mode_controller
 var _active := false
 
-func setup(control, core_update, autostart, config, settings, resident_controller) -> void:
+func setup(control, core_update, autostart, config, settings, resident_controller, window_controller = null) -> void:
 	mihomo_control = control
 	core_update_service = core_update
 	autostart_service = autostart
 	proxy_config = config
 	settings_panel = settings
 	resident = resident_controller
+	window_mode_controller = window_controller
 	settings_panel.core_restart_requested.connect(_on_core_restart_requested)
 	settings_panel.core_update_requested.connect(_on_core_update_requested)
 	settings_panel.ports_apply_requested.connect(_on_ports_apply_requested)
+	settings_panel.window_settings_apply_requested.connect(_on_window_settings_apply_requested)
 	settings_panel.port_random_requested.connect(_on_port_random_requested)
 	core_update_service.progress_changed.connect(_on_core_update_progress_changed)
 	core_update_service.finished.connect(_on_core_update_finished)
@@ -44,6 +47,13 @@ func _on_ports_apply_requested(mixed_port: int, controller_port: int) -> void:
 	if bool(result.get("ok", false)):
 		settings_panel.set_port_values(proxy_config.mixed_port(), proxy_config.controller_port())
 	settings_panel.show_port_message(str(result.get("message", "端口设置失败。")), bool(result.get("ok", false)))
+
+func _on_window_settings_apply_requested(borderless: bool, width: int, height: int) -> void:
+	if not _active:
+		return
+	proxy_config.set_window_settings(borderless, width, height)
+	if window_mode_controller and window_mode_controller.has_method("apply_saved_window_mode"):
+		window_mode_controller.apply_saved_window_mode()
 
 func _on_port_random_requested(kind: String) -> void:
 	if not _active:

@@ -76,13 +76,17 @@ func _ready() -> void:
 	var brand_migration: Dictionary = UserDataBrandMigratorScript.new().migrate_if_needed()
 	if bool(brand_migration.get("migrated", false)):
 		print("HexagonProxy user data migrated: %d files" % int(brand_migration.get("copied", 0)))
-	window_mode_controller = WindowModeControllerScript.new()
-	add_child(window_mode_controller)
-	window_mode_controller.setup(get_window())
-	window_mode_controller.start()
 	app = AppControllerScript.new()
 	add_child(app)
 	app.start()
+	window_mode_controller = WindowModeControllerScript.new()
+	add_child(window_mode_controller)
+	var window_config = null
+	var proxy_service_for_window = app.get_service("proxy")
+	if proxy_service_for_window != null and proxy_service_for_window.has_method("get_config"):
+		window_config = proxy_service_for_window.get_config()
+	window_mode_controller.setup(get_window(), window_config)
+	window_mode_controller.start()
 	ui_theme_service = app.get_service("ui_theme")
 	ui = UiFactoryScript.new(ui_theme_service.snapshot())
 
@@ -167,7 +171,7 @@ func _ready() -> void:
 	codex_profile_coordinator.start()
 	settings_coordinator = SettingsCoordinatorScript.new()
 	add_child(settings_coordinator)
-	settings_coordinator.setup(mihomo_control, core_update_service, autostart_service, proxy_service.config, settings_panel, resident)
+	settings_coordinator.setup(mihomo_control, core_update_service, autostart_service, proxy_service.config, settings_panel, resident, window_mode_controller)
 	settings_coordinator.start()
 	port_conflict_coordinator = PortConflictCoordinatorScript.new()
 	add_child(port_conflict_coordinator)

@@ -7,24 +7,38 @@ extends Node
 
 signal exit_shortcut_requested
 
-const WINDOWED_SIZE := Vector2i(1920, 1080)
-const DEFAULT_FULLSCREEN := true
+const DEFAULT_WINDOW_SIZE := Vector2i(1920, 1080)
 
 var target_window: Window
+var proxy_config
 var _active := false
 
-func setup(window: Window) -> void:
+func setup(window: Window, config = null) -> void:
 	target_window = window
+	proxy_config = config
 
 func start() -> void:
 	_active = true
 	set_process_unhandled_key_input(true)
 	var tray_start := "--tray-start" in OS.get_cmdline_user_args()
-	if DEFAULT_FULLSCREEN and not tray_start and DisplayServer.get_name().to_lower() != "headless":
-		call_deferred("set_fullscreen", true)
+	if not tray_start and DisplayServer.get_name().to_lower() != "headless":
+		call_deferred("apply_saved_window_mode")
 
 func startup_fullscreen_enabled() -> bool:
-	return DEFAULT_FULLSCREEN
+	return _is_borderless()
+
+func apply_saved_window_mode() -> void:
+	set_fullscreen(_is_borderless())
+
+func _is_borderless() -> bool:
+	if proxy_config and proxy_config.has_method("window_borderless"):
+		return proxy_config.window_borderless()
+	return true
+
+func _window_size() -> Vector2i:
+	if proxy_config and proxy_config.has_method("window_size"):
+		return proxy_config.window_size()
+	return DEFAULT_WINDOW_SIZE
 
 func shutdown() -> void:
 	_active = false
@@ -38,6 +52,11 @@ func is_fullscreen() -> bool:
 func minimize_window() -> void:
 	if not is_instance_valid(target_window) or DisplayServer.get_name().to_lower() == "headless":
 		return
+	# 避免无边框全屏窗口直接切换 MINIMIZED 导致 Windows 重建窗口表面产生闪屏。
+	# 先恢复窗口焦点状态，再交给系统最小化。
+	if target_window.mode == Window.MODE_FULLSCREEN:
+		target_window.mode = Window.MODE_WINDOWED
+		await get_tree().process_frame
 	target_window.mode = Window.MODE_MINIMIZED
 
 func set_fullscreen(enabled: bool) -> void:
@@ -49,7 +68,7 @@ func set_fullscreen(enabled: bool) -> void:
 		return
 	target_window.mode = Window.MODE_WINDOWED
 	target_window.borderless = false
-	target_window.size = WINDOWED_SIZE
+	target_window.size = _window_size()
 	call_deferred("_center_window")
 
 func _center_window() -> void:

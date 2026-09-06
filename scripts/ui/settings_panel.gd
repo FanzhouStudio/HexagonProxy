@@ -9,6 +9,7 @@ signal port_release_confirmed(port: int, pids: PackedInt32Array)
 signal core_restart_requested
 signal core_update_requested
 signal ui_theme_requested(theme_id: String)
+signal window_settings_apply_requested(borderless: bool, width: int, height: int)
 signal log_message(message: String)
 
 const SURFACE := Color("e9fbfbd4")
@@ -40,6 +41,8 @@ var core_progress_label: Label
 var theme_selector: OptionButton
 var theme_description_label: Label
 var theme_message_label: Label
+var window_borderless_toggle: CheckButton
+var window_resolution_selector: OptionButton
 func setup(factory: UiFactory, config, system_proxy_enabled: bool, prompt_host: Control = null) -> void:
 	ui = factory
 	proxy_config = config
@@ -50,6 +53,7 @@ func build() -> Control:
 	var page := VBoxContainer.new()
 	page.add_theme_constant_override("separation", 14)
 	page.add_child(_build_appearance_card())
+	page.add_child(_build_window_card())
 	page.add_child(_build_core_card())
 	page.add_child(_build_behavior_card())
 	return page
@@ -85,6 +89,36 @@ func _build_appearance_card() -> PanelContainer:
 	row.add_child(theme_selector)
 	theme_message_label = ui.label("按钮、卡片与输入框使用纹理底图 · 文字自动适配明暗主题", 10, MUTED)
 	column.add_child(theme_message_label)
+	return card
+
+func _build_window_card() -> PanelContainer:
+	var card := ui.panel(SURFACE, BORDER, 20)
+	card.custom_minimum_size.y = 150
+	var margin := ui.margin(22, 16, 22, 16)
+	card.add_child(margin)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 8)
+	margin.add_child(column)
+	column.add_child(ui.label("窗口显示", 18, TEXT))
+	window_borderless_toggle = CheckButton.new()
+	window_borderless_toggle.text = "无边框模式（自动适配屏幕）"
+	ui.apply_crystal_toggle_theme(window_borderless_toggle)
+	window_borderless_toggle.set_pressed_no_signal(proxy_config.window_borderless() if proxy_config.has_method("window_borderless") else true)
+	column.add_child(window_borderless_toggle)
+	var row := HBoxContainer.new()
+	column.add_child(row)
+	row.add_child(ui.label("窗口分辨率", 13, TEXT))
+	window_resolution_selector = OptionButton.new()
+	for size in ["1280 x 720", "1600 x 900", "1920 x 1080", "2560 x 1440"]:
+		window_resolution_selector.add_item(size)
+	row.add_child(window_resolution_selector)
+	var apply := ui.small_choice_button("应用窗口")
+	apply.pressed.connect(func() -> void:
+		var values := [Vector2i(1280,720), Vector2i(1600,900), Vector2i(1920,1080), Vector2i(2560,1440)]
+		var index := window_resolution_selector.selected
+		window_settings_apply_requested.emit(window_borderless_toggle.button_pressed, values[index].x, values[index].y)
+	)
+	row.add_child(apply)
 	return card
 
 func _build_core_card() -> PanelContainer:

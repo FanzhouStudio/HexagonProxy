@@ -17,6 +17,9 @@ const ROUTING_RULE_SOURCE_DIR := "res://third_party/meta-rules-dat"
 
 var _mixed_port := DEFAULT_MIXED_PORT
 var _controller_port := DEFAULT_CONTROLLER_PORT
+var _window_borderless := true
+var _window_width := 1920
+var _window_height := 1080
 
 func _init() -> void:
 	_load_ports()
@@ -44,6 +47,18 @@ func controller_port() -> int:
 
 func mixed_port() -> int:
 	return _mixed_port
+
+func window_borderless() -> bool:
+	return _window_borderless
+
+func window_size() -> Vector2i:
+	return Vector2i(_window_width, _window_height)
+
+func set_window_settings(borderless: bool, width: int, height: int) -> void:
+	_window_borderless = borderless
+	_window_width = clampi(width, 800, 3840)
+	_window_height = clampi(height, 600, 2160)
+	_save_window_settings()
 
 func set_ports(mixed: int, controller: int) -> Dictionary:
 	if not _valid_port(mixed) or not _valid_port(controller):
@@ -104,11 +119,21 @@ func _load_ports() -> void:
 	if _valid_port(mixed) and _valid_port(controller) and mixed != controller:
 		_mixed_port = mixed
 		_controller_port = controller
+	_window_borderless = bool(settings.get_value("window", "borderless", true))
+	_window_width = int(settings.get_value("window", "width", 1920))
+	_window_height = int(settings.get_value("window", "height", 1080))
 
 func _save_ports() -> void:
 	var settings := ConfigFile.new()
 	settings.set_value("network", "mixed_port", _mixed_port)
 	settings.set_value("network", "controller_port", _controller_port)
+	settings.save(SETTINGS_PATH)
+
+func _save_window_settings() -> void:
+	var settings := ConfigFile.new()
+	settings.set_value("window", "borderless", _window_borderless)
+	settings.set_value("window", "width", _window_width)
+	settings.set_value("window", "height", _window_height)
 	settings.save(SETTINGS_PATH)
 
 func _write_text_atomic(path: String, content: String) -> bool:
