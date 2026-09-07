@@ -11,7 +11,7 @@
 
 <p align="center">
   <img alt="Latest Release" src="https://img.shields.io/github/v/release/FanzhouStudio/HexagonProxy?label=Release">
-  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.1.8-16866f">
+  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.2.0-16866f">
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-3478b8">
   <img alt="Godot" src="https://img.shields.io/badge/Godot-4.7-478cbf">
   <img alt="Mihomo" src="https://img.shields.io/badge/Core-Mihomo-16866f">
@@ -26,7 +26,7 @@
 
 HexagonProxy 将订阅、节点、系统代理、TUN、应用分流、故障切换、内置终端、Codex 多账号与桌面宠物整合在同一个像素水晶界面中。网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理，客户端负责本地配置、交互与 Windows 集成。
 
-> **v0.1.8**：新增轻量 TUN 全局接管及系统代理互斥切换；重构 Codex 多账号凭证持久化、独立授权、额度展示和事务回滚。
+> **v0.2.0**：修复 Codex 授权失败、CLI 路径识别和启动卡住问题；支持在 Codex 运行期间独立添加授权账号。详见 [更新日志](RELEASE_NOTES_v0.2.0.md)。
 
 ## 下载与首次使用
 
@@ -43,10 +43,10 @@ HexagonProxy 将订阅、节点、系统代理、TUN、应用分流、故障切�
 
 使用 Windows 系统代理时通常不需要管理员权限；使用 TUN 时请以管理员身份运行。当前个人发布版本尚未购买代码签名证书，因此 Windows SmartScreen 或部分安全软件可能显示未知发布者/启发式提示；建议从官方 Releases 下载并核对 SHA256。
 
-当前 v0.1.8 便携版 SHA256：
+当前 v0.2.0 便携版 SHA256：
 
 ```text
-8854AF0D1CF614F3887731131E75B99E18671127995A4F5FC88D3C7096B666E5
+2CD28F252BF95EC220C9AD958ADE025B4BB0143A38724F611240F3F6BF4F9B64
 ```
 
 ### 快速开始
@@ -129,7 +129,7 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 
 ### Codex 账号切换
 
-- 推荐点击“授权添加账号”，在浏览器完成一次官方登录；也可导入包含完整令牌的 `auth.json`。
+- 推荐点击“授权添加账号”，在浏览器完成一次官方登录；Codex 正在运行时也可添加。也可导入包含完整令牌的 `auth.json`。
 - “保存为独立账号”按登录身份匹配已有账号；新身份保存为新账号，不再覆盖默认栏。空账号栏可点击“将当前登录保存到此账号”，把当前登录绑定到指定栏位。
 - 状态刷新不会替换已保存账号身份；切换前若发现外部更换了登录，会先独立保存新账号，保护旧备份。
 - 切换先关闭 Codex，再保存它最新的登录状态，仅切换 `auth.json` 与 `config.toml`，随后重新启动。聊天历史、SQLite 数据库和插件文件不被复制或覆盖。
@@ -140,6 +140,8 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 - 登录文件只保存在本机。额度查询和续期仅请求固定的 OpenAI 官方地址，令牌不进入界面、账号索引或错误输出。同一 OpenAI 身份只使用时间最新的授权，更新后同步到该身份的其他本地配置，避免旧 refresh token 副本被重复使用。备用账号在访问令牌临近过期或额度接口返回 401 时尝试续期；运行中的账号由 Codex 自己续期。续期失败保留原文件；授权被服务端撤销或拒绝时仍需重新授权。
 - 支持 `CODEX_HOME`，兼容旧版独立账号目录；迁移只复制认证与配置，保留原始目录。移除账号只删除列表入口。
 - 当前切换使用文件凭据。若当前登录使用 `keyring` / `auto` 或 `auth.json` 不完整，会在修改前提示先设置 `cli_auth_credentials_store = "file"` 并重新登录，确保原账号能够恢复。
+
+授权程序会优先查找用户目录中的官方 Codex CLI，并验证其可执行性，兼容从资源管理器启动、PATH 中没有 Codex CLI 的环境。启动操作通过结果文件返回状态，超时或失败会显示提示。若提示找不到 CLI，请安装官方 Codex CLI 后重试，或导入完整登录文件。
 
 账号索引位于 Godot 用户数据目录的 `codex_profiles.json`，备份默认位于 `%USERPROFILE%\.codex-profiles\HexagonProxy\accounts`。切换会中断 Codex 中正在运行的本地任务，界面会在执行前提示。
 

@@ -1,4 +1,4 @@
-﻿param(
+param(
     [ValidateSet('inspect', 'switch', 'launch', 'capture', 'import', 'prepare', 'usage', 'recover', 'login')]
     [string]$Action = 'inspect',
     [string]$CodexHome = '',
@@ -9,6 +9,7 @@
     [string]$PendingIndex = '',
     [string]$ExpectedProfileId = '',
     [string]$RelatedHomes = '',
+    [string]$ResultPath = '',
     [switch]$Library
 )
 
@@ -275,24 +276,59 @@ function Update-AccountTokens($Path, [bool]$Force = $false) {
     return $updated
 }
 
+function Get-CodexCliExecutable {
+    $candidates = @()
+    # Explorer-launched apps do not inherit Codex's augmented PATH. The Store
+    # resources executable can also be present but denied execution (Win32 5).
+    $binRoot = Join-Path $env:LOCALAPPDATA 'OpenAI\Codex\bin'
+    if (Test-Path -LiteralPath $binRoot) {
+        foreach ($dir in @(Get-ChildItem -LiteralPath $binRoot -Directory | Sort-Object LastWriteTime -Descending)) {
+            $candidates += Join-Path $dir.FullName 'codex.exe'
+        }
+    }
+    $cli = Get-Command codex.exe -ErrorAction SilentlyContinue
+    if ($cli) { $candidates += $cli.Source }
+    $desktop = Get-CodexExecutable
+    if ($desktop) { $candidates += Join-Path (Split-Path $desktop) 'resources\codex.exe' }
+    foreach ($candidate in @($candidates | Select-Object -Unique)) {
+        if (-not [IO.File]::Exists($candidate)) { continue }
+        $probe = $null
+        try {
+            $info = New-Object Diagnostics.ProcessStartInfo
+            $info.FileName = $candidate
+            $info.Arguments = '--version'
+            $info.UseShellExecute = $false
+            $info.CreateNoWindow = $true
+            $info.RedirectStandardOutput = $true
+            $info.RedirectStandardError = $true
+            $probe = [Diagnostics.Process]::Start($info)
+            $stdout = $probe.StandardOutput.ReadToEndAsync()
+            $stderr = $probe.StandardError.ReadToEndAsync()
+            if ($probe.WaitForExit(5000) -and $probe.ExitCode -eq 0 -and $stdout.Result -match '^codex-cli\s') {
+                return $candidate
+            }
+        } catch {
+            # Try the next official installation; do not expose process output.
+        } finally {
+            if ($probe) {
+                if (-not $probe.HasExited) { $probe.Kill() }
+                $probe.Dispose()
+            }
+        }
+    }
+    throw 'cli_missing'
+}
+
 function Invoke-Login {
     Assert-DifferentDirectories (Get-ActiveHome) $CodexHome
     if ([IO.File]::Exists((Join-Path $CodexHome 'auth.json'))) { throw 'state_changed' }
-    $cli = Get-Command codex.exe -ErrorAction SilentlyContinue
-    $exe = if ($cli) { $cli.Source } else { '' }
-    if (-not $exe) {
-        $desktop = Get-CodexExecutable
-        if ($desktop) {
-            $candidate = Join-Path (Split-Path $desktop) 'resources\codex.exe'
-            if ([IO.File]::Exists($candidate)) { $exe = $candidate }
-        }
-    }
-    if (-not $exe) { throw 'cli_missing' }
+    $exe = Get-CodexCliExecutable
     [void][IO.Directory]::CreateDirectory($CodexHome)
     Write-Atomic (Join-Path $CodexHome 'config.toml') $script:Utf8.GetBytes('cli_auth_credentials_store = "file"')
     $start = New-Object Diagnostics.ProcessStartInfo
     $start.FileName = $exe
     $start.Arguments = 'login'
+    # Environment isolation and redirected streams require direct process launch.
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
     $start.RedirectStandardOutput = $true
@@ -300,16 +336,45 @@ function Invoke-Login {
     $start.EnvironmentVariables['CODEX_HOME'] = $CodexHome
     $process = [Diagnostics.Process]::Start($start)
     try {
-        $outTask = $process.StandardOutput.ReadToEndAsync()
-        $errTask = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit(900000)) { $process.Kill(); throw 'login_timeout' }
+        $streams = @($process.StandardOutput, $process.StandardError)
+        $tasks = @($streams[0].ReadLineAsync(), $streams[1].ReadLineAsync())
+        $deadline = [DateTime]::UtcNow.AddMinutes(15)
+        $browserOpened = $false
+        while (-not $process.HasExited) {
+            for ($i = 0; $i -lt 2; $i++) {
+                if ($null -ne $tasks[$i] -and $tasks[$i].IsCompleted) {
+                    $line = $tasks[$i].GetAwaiter().GetResult()
+                    if ($null -ne $line) {
+                        # Hidden CLI processes cannot reliably open the browser themselves.
+                        # Never pass arbitrary CLI output to the shell or include it in errors.
+                        if (-not $browserOpened -and $line -match '(https://auth\.openai\.com/oauth/authorize\?[^\s]+)') {
+                            $browser = New-Object Diagnostics.ProcessStartInfo
+                            $browser.FileName = $Matches[1]
+                            $browser.UseShellExecute = $true
+                            try {
+                                [void][Diagnostics.Process]::Start($browser)
+                                $browserOpened = $true
+                                if ($ResultPath) { Write-JsonFile ($ResultPath + '.progress') @{ browser_opened = $true } }
+                            }
+                            catch { throw 'browser_failed' }
+                        }
+                        $tasks[$i] = $streams[$i].ReadLineAsync()
+                    } else { $tasks[$i] = $null }
+                }
+            }
+            if ([DateTime]::UtcNow -gt $deadline) { throw 'login_timeout' }
+            Start-Sleep -Milliseconds 50
+        }
         if ($process.ExitCode -ne 0) { throw 'login_failed' }
         $info = Get-HomeInfo $CodexHome
         if (-not $info.login_present) { throw 'missing_tokens' }
         Write-SnapshotManifest $CodexHome
         Publish-AccountCredentials $CodexHome
         return @{ ok = $true; account = $info }
-    } finally { $process.Dispose() }
+    } finally {
+        if (-not $process.HasExited) { $process.Kill() }
+        $process.Dispose()
+    }
 }
 
 # Replace complete top-level TOML statements, respecting comments, multiline
@@ -415,6 +480,7 @@ function Start-Codex {
     $startInfo.CreateNoWindow = $true
     $startInfo.EnvironmentVariables['CODEX_HOME'] = Get-ActiveHome
     $startInfo.EnvironmentVariables.Remove('CODEX_ELECTRON_USER_DATA_PATH')
+    $startInfo.EnvironmentVariables.Remove('ELECTRON_RUN_AS_NODE')
     $process = [Diagnostics.Process]::Start($startInfo)
     if ($null -eq $process) { throw 'launch_failed' }
     Start-Sleep -Milliseconds 900
@@ -617,11 +683,12 @@ if (-not $Library) {
     } catch {
         # Exception bodies can contain credentials, so only return stable codes.
         $known = @('unsafe_path', 'snapshot_missing', 'invalid_auth', 'missing_tokens', 'invalid_config', 'not_installed', 'stop_failed', 'backup_failed', 'launch_failed', 'index_failed', 'api_usage_unsupported', 'missing_account_id', 'login_expired', 'usage_forbidden', 'usage_rate_limited', 'usage_failed', 'usage_invalid', 'busy', 'recovery_required', 'state_changed', 'current_auth_unavailable')
-        $known += @('auth_refresh_pending', 'reauthorization_required', 'token_refresh_failed', 'cli_missing', 'login_timeout', 'login_failed')
+        $known += @('auth_refresh_pending', 'reauthorization_required', 'token_refresh_failed', 'cli_missing', 'login_timeout', 'login_failed', 'browser_failed')
         $code = 'operation_failed'
         if ($known -contains $_.Exception.Message) { $code = $_.Exception.Message }
         $result = @{ ok = $false; message_code = $code; error_type = $_.Exception.GetType().Name; error_line = $_.InvocationInfo.ScriptLineNumber }
     } finally { if ($lock) { $lock.Dispose() } }
-    $result | ConvertTo-Json -Compress -Depth 12
+    if ($ResultPath) { Write-JsonFile $ResultPath $result }
+    else { $result | ConvertTo-Json -Compress -Depth 12 }
     exit 0
 }

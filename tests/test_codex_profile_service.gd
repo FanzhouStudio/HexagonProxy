@@ -235,6 +235,13 @@ func _run() -> void:
 	check(not bool(api_usage.get("ok")) and str(api_usage.get("message", "")).contains("API Key"), "API usage reports unsupported without network")
 	check(not FileAccess.get_file_as_string(native_root.path_join("index.json")).contains("test-only-not-a-real-key"), "index contains no secret")
 	check(not FileAccess.file_exists(native_root.path_join("active/auth.json")), "native import never modifies active login")
+	# A long-lived desktop child must not keep the UI waiting for output EOF.
+	var fake_helper := FileAccess.open(native._helper_path(), FileAccess.WRITE)
+	fake_helper.store_string("param($Action, $ActiveHome, $ResultPath)\nStart-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile -Command Start-Sleep -Seconds 8'\n[IO.File]::WriteAllText($ResultPath, '{\"ok\":true}')\n")
+	fake_helper.close()
+	var started := Time.get_ticks_msec()
+	var detached: Dictionary = await native._call_helper("inspect")
+	check(bool(detached.get("ok")) and Time.get_ticks_msec() - started < 6000, "helper result returns while detached child is alive")
 	native.dispose()
 	native.free()
 	print("PASS: %d Codex profile service checks" % checks)

@@ -520,35 +520,38 @@ func _call_helper(action: String, parameters: Dictionary = {}) -> Dictionary:
 	for key in parameters:
 		args.append("-" + str(key))
 		args.append(str(parameters[key]))
-	var thread := Thread.new()
-	_worker = thread
-	var error := thread.start(_execute_helper.bind(args))
-	if error != OK:
-		return _failure("无法启动 Codex 操作线程。")
-	while thread.is_alive():
-		await get_tree().process_frame
+	# Electron children may retain inherited output pipes. Use an atomic result
+	# file so completing an operation never depends on the desktop exiting.
+	var result_path := _helper_path() + ".result-%d-%d.json" % [Time.get_ticks_usec(), randi()]
+	args.append_array(PackedStringArray(["-ResultPath", result_path]))
+	var pid := OS.create_process("powershell.exe", args, false)
+	if pid <= 0:
+		return _failure("无法启动 Codex 操作助手。")
+	var deadline := Time.get_ticks_msec() + (920000 if action == "login" else 120000)
+	while not FileAccess.file_exists(result_path):
+		if not OS.is_process_running(pid) or Time.get_ticks_msec() >= deadline:
+			if OS.is_process_running(pid):
+				OS.kill(pid)
+			return _failure("Codex 操作未完成或等待超时，请刷新状态后重试；若提示中断切换，请先恢复。")
+		await get_tree().create_timer(0.1).timeout
 		if _disposed:
 			return _failure("应用正在退出。")
-	var result: Dictionary = thread.wait_to_finish()
-	_worker = null
-	# PowerShell can preserve a handled child-process exit code. Prefer its
-	# structured, redacted JSON result whenever one was produced.
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(result_path).trim_prefix("\ufeff"))
+	DirAccess.remove_absolute(result_path)
+	if FileAccess.file_exists(result_path + ".progress"):
+		DirAccess.remove_absolute(result_path + ".progress")
+	if not parsed is Dictionary:
+		return _failure("Codex 操作助手返回异常。")
+	var result: Dictionary = parsed
 	if not bool(result.get("ok", false)) and not result.has("message"):
 		result["message"] = _message_for_code(str(result.get("message_code", "")))
+		if result.get("message_code", "") == "operation_failed":
+			result["message"] = "Codex 助手执行失败（%s，第 %d 行）。请提供此信息以便定位。" % [str(result.get("error_type", "unknown")), int(result.get("error_line", 0))]
 	return result
-
-func _execute_helper(args: PackedStringArray) -> Dictionary:
-	var output: Array = []
-	var code := OS.execute("powershell.exe", args, output, true, false)
-	var parser := JSON.new()
-	var parse_error := parser.parse("\n".join(output).strip_edges().trim_prefix("\ufeff"))
-	var parsed: Variant = parser.data if parse_error == OK else null
-	if parsed is Dictionary:
-		return parsed
-	return _failure("Codex 操作助手执行失败（退出码 %d）。" % code) if code != 0 else _failure("Codex 操作助手返回异常。")
 
 func _message_for_code(code: String) -> String:
 	match code:
+		"browser_failed": return "无法打开默认浏览器，请在 Windows 设置中配置默认浏览器后重试。当前登录未改变。"
 		"auth_refresh_pending": return "授权文件仍保留；当前账号的访问令牌等待 Codex 续期，请在 Codex 中使用后刷新额度。"
 		"reauthorization_required": return "授权续期被拒绝，原 auth.json 已保留。请通过“授权添加账号”重新授权，或导入最新登录。"
 		"token_refresh_failed": return "授权续期暂时失败，登录文件未删除；请检查网络后重试。"
