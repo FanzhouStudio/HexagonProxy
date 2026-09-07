@@ -1,5 +1,5 @@
 ﻿param(
-    [ValidateSet('inspect', 'switch', 'launch', 'capture', 'import', 'prepare', 'usage', 'recover')]
+    [ValidateSet('inspect', 'switch', 'launch', 'capture', 'import', 'prepare', 'usage', 'recover', 'login')]
     [string]$Action = 'inspect',
     [string]$CodexHome = '',
     [string]$CurrentSnapshot = '',
@@ -127,6 +127,128 @@ function Get-HomeInfo($Path) {
     catch { return @{ login_present = $false; auth_error = 'missing_tokens' } }
 }
 
+function Test-SameAccount($First, $Second) {
+    $a = Get-AuthInfo $First; $b = Get-AuthInfo $Second
+    if ($a.auth_kind -eq 'api' -or $b.auth_kind -eq 'api') {
+        return ($a.auth_kind -eq 'api' -and $b.auth_kind -eq 'api' -and $First.OPENAI_API_KEY -ceq $Second.OPENAI_API_KEY)
+    }
+    return ($a.account_id -and $a.account_id -eq $b.account_id -and
+        (-not $a.email -or -not $b.email -or $a.email -eq $b.email))
+}
+
+# Account credentials are durable records, unlike exact rollback snapshots.
+# A logout/missing live file must never erase a saved authorization.
+function Sync-AccountAuth($Source, $Target) {
+    Assert-DifferentDirectories $Source $Target
+    $sourceFile = Join-Path $Source 'auth.json'
+    if (-not [IO.File]::Exists($sourceFile)) { return }
+    $bytes = [IO.File]::ReadAllBytes($sourceFile)
+    $auth = $script:Utf8.GetString($bytes) | ConvertFrom-Json
+    $null = Get-AuthInfo $auth
+    $targetFile = Join-Path $Target 'auth.json'
+    if ([IO.File]::Exists($targetFile)) {
+        if (-not (Test-SameAccount $auth (Read-JsonFile $targetFile))) { throw 'state_changed' }
+    }
+    Write-Atomic $targetFile $bytes
+    $config = Join-Path $Source 'config.toml'
+    if ([IO.File]::Exists($config)) { Write-Atomic (Join-Path $Target 'config.toml') ([IO.File]::ReadAllBytes($config)) }
+    Write-SnapshotManifest $Target
+}
+
+function Test-AccessExpired($Auth) {
+    $claims = Read-Claims ([string]$Auth.tokens.access_token)
+    return ($claims -and $claims.exp -and [long]$claims.exp -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 60)
+}
+
+function Update-AccountTokens($Path, [bool]$Force = $false) {
+    $file = Join-Path $Path 'auth.json'
+    $auth = Read-JsonFile $file
+    $info = Get-AuthInfo $auth
+    if ($info.auth_kind -eq 'api') { return $auth }
+    $live = Get-ActiveHome
+    $liveFile = Join-Path $live 'auth.json'
+    $samePath = [IO.Path]::GetFullPath($Path).TrimEnd('\') -eq [IO.Path]::GetFullPath($live).TrimEnd('\')
+    $active = $false
+    if ([IO.File]::Exists($liveFile)) {
+        $current = Read-JsonFile $liveFile
+        $active = Test-SameAccount $auth $current
+        if ($active -and -not $samePath) {
+            Sync-AccountAuth $live $Path
+            $auth = Read-JsonFile $file
+        }
+    }
+    if (-not $Force -and -not (Test-AccessExpired $auth)) { return $auth }
+    # Do not race the desktop app's rotating refresh token. It owns active auth.
+    if ($active -and @(Get-CodexProcesses).Count -gt 0) { throw 'auth_refresh_pending' }
+    $before = [IO.File]::ReadAllText($file)
+    try {
+        $response = Invoke-RestMethod -Uri 'https://auth.openai.com/oauth/token' -Method Post -ContentType 'application/x-www-form-urlencoded' -Body @{
+            grant_type = 'refresh_token'; refresh_token = $auth.tokens.refresh_token
+            client_id = 'app_EMoamEEZ73f0CkXaXp7hrann'
+        } -TimeoutSec 18 -MaximumRedirection 0
+    } catch {
+        $status = 0
+        if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+        if ($status -in @(400, 401)) { throw 'reauthorization_required' }
+        throw 'token_refresh_failed'
+    }
+    if (-not ($response.access_token -is [string]) -or -not $response.access_token) { throw 'token_refresh_failed' }
+    $updated = $before | ConvertFrom-Json
+    $updated.tokens.access_token = $response.access_token
+    if ($response.id_token) { $updated.tokens.id_token = $response.id_token }
+    if ($response.refresh_token) { $updated.tokens.refresh_token = $response.refresh_token }
+    $updated | Add-Member -NotePropertyName last_refresh -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
+    if (-not (Test-SameAccount $auth $updated)) { throw 'state_changed' }
+    # Store the rotated token before updating any secondary copy. Never retry a
+    # consumed refresh token merely because a later usage request failed.
+    if ([IO.File]::ReadAllText($file) -ne $before) { throw 'state_changed' }
+    Write-JsonFile $file $updated
+    if (-not $samePath) { Write-SnapshotManifest $Path }
+    if ($active -and -not $samePath -and [IO.File]::Exists($liveFile)) {
+        $latest = Read-JsonFile $liveFile
+        if (Test-SameAccount $auth $latest) {
+            if ($latest.tokens.refresh_token -eq $auth.tokens.refresh_token) { Write-JsonFile $liveFile $updated }
+        }
+    }
+    return $updated
+}
+
+function Invoke-Login {
+    Assert-DifferentDirectories (Get-ActiveHome) $CodexHome
+    if ([IO.File]::Exists((Join-Path $CodexHome 'auth.json'))) { throw 'state_changed' }
+    $cli = Get-Command codex.exe -ErrorAction SilentlyContinue
+    $exe = if ($cli) { $cli.Source } else { '' }
+    if (-not $exe) {
+        $desktop = Get-CodexExecutable
+        if ($desktop) {
+            $candidate = Join-Path (Split-Path $desktop) 'resources\codex.exe'
+            if ([IO.File]::Exists($candidate)) { $exe = $candidate }
+        }
+    }
+    if (-not $exe) { throw 'cli_missing' }
+    [void][IO.Directory]::CreateDirectory($CodexHome)
+    Write-Atomic (Join-Path $CodexHome 'config.toml') $script:Utf8.GetBytes('cli_auth_credentials_store = "file"')
+    $start = New-Object Diagnostics.ProcessStartInfo
+    $start.FileName = $exe
+    $start.Arguments = 'login'
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $start.EnvironmentVariables['CODEX_HOME'] = $CodexHome
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        $outTask = $process.StandardOutput.ReadToEndAsync()
+        $errTask = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'login_timeout' }
+        if ($process.ExitCode -ne 0) { throw 'login_failed' }
+        $info = Get-HomeInfo $CodexHome
+        if (-not $info.login_present) { throw 'missing_tokens' }
+        Write-SnapshotManifest $CodexHome
+        return @{ ok = $true; account = $info }
+    } finally { $process.Dispose() }
+}
+
 # Replace complete top-level TOML statements, respecting comments, multiline
 # strings, arrays, inline tables and quoted keys. Retain all unrelated text.
 function Set-RootConfig([string]$Text, [hashtable]$Settings, [hashtable]$Previous = $null) {
@@ -251,7 +373,7 @@ function Convert-Usage($Payload) {
     return $usage
 }
 function Get-Usage($Path) {
-    $auth = Read-JsonFile (Join-Path $Path 'auth.json')
+    $auth = Update-AccountTokens $Path
     $info = Get-AuthInfo $auth
     if ($info.auth_kind -eq 'api') { throw 'api_usage_unsupported' }
     if (-not $info.account_id) { throw 'missing_account_id' }
@@ -262,10 +384,15 @@ function Get-Usage($Path) {
     } catch {
         $status = 0
         if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
-        if ($status -eq 401) { throw 'login_expired' }
-        if ($status -eq 403) { throw 'usage_forbidden' }
-        if ($status -eq 429) { throw 'usage_rate_limited' }
-        throw 'usage_failed'
+        if ($status -eq 401) {
+            $auth = Update-AccountTokens $Path $true
+            $headers.Authorization = 'Bearer ' + $auth.tokens.access_token
+            try { $payload = Invoke-RestMethod -Uri 'https://chatgpt.com/backend-api/wham/usage' -Headers $headers -UserAgent 'HexagonProxy' -TimeoutSec 18 -MaximumRedirection 0 }
+            catch { throw 'usage_failed' }
+        }
+        elseif ($status -eq 403) { throw 'usage_forbidden' }
+        elseif ($status -eq 429) { throw 'usage_rate_limited' }
+        else { throw 'usage_failed' }
     }
     if ($null -eq $payload.rate_limit) { throw 'usage_invalid' }
     return @{ ok = $true; usage = (Convert-Usage $payload); account = $info }
@@ -303,12 +430,11 @@ function Invoke-Switch {
     if ([IO.File]::Exists((Join-Path $live 'auth.json')) -and -not (Get-HomeInfo $live).login_present) { throw 'current_auth_unavailable' }
     Assert-DifferentDirectories $live $CodexHome
     Assert-DifferentDirectories $live $CurrentSnapshot
-    Assert-DifferentDirectories $CurrentSnapshot $CodexHome
     Assert-Snapshot $CodexHome
     # Validate the target before stopping the application or writing active files.
     $authPath = Join-Path $CodexHome 'auth.json'
     $newAuth = $null
-    if ([IO.File]::Exists($authPath)) { $newAuth = [IO.File]::ReadAllBytes($authPath); $null = Get-AuthInfo (Read-JsonFile $authPath) }
+    if ([IO.File]::Exists($authPath)) { $null = Update-AccountTokens $CodexHome; $newAuth = [IO.File]::ReadAllBytes($authPath); $null = Get-AuthInfo (Read-JsonFile $authPath) }
     elseif (-not [IO.File]::Exists((Join-Path $CodexHome 'snapshot.json'))) { throw 'snapshot_missing' }
     $configPath = Join-Path $CodexHome 'config.toml'
     $newConfig = $null
@@ -327,13 +453,17 @@ function Invoke-Switch {
     $wasRunning = @(Get-CodexProcesses).Count -gt 0
     Stop-Codex
     # Shutdown first, then capture the latest token refreshed by the app.
-    try { Save-Snapshot $live $CurrentSnapshot }
+    $rollbackSnapshot = Join-Path $live ('.hexagonproxy-rollback-' + [guid]::NewGuid().ToString('N'))
+    try {
+        Save-Snapshot $live $rollbackSnapshot
+        Sync-AccountAuth $live $CurrentSnapshot
+    }
     catch {
         if ($wasRunning) { try { Start-Codex } catch {} }
         throw 'backup_failed'
     }
     try {
-        $journal = @{ snapshot = $CurrentSnapshot; was_running = $wasRunning; index_path = $IndexPath }
+        $journal = @{ snapshot = $rollbackSnapshot; was_running = $wasRunning; index_path = $IndexPath }
         if ($IndexPath) { $journal.index_hash = (Get-FileHash -LiteralPath $pending -Algorithm SHA256).Hash }
         Write-JsonFile (Join-Path $live '.hexagonproxy-recovery.json') $journal
         foreach ($entry in @(@{ name = 'auth.json'; bytes = $newAuth }, @{ name = 'config.toml'; bytes = $newConfig })) {
@@ -346,9 +476,9 @@ function Invoke-Switch {
     } catch {
         try {
             Stop-Codex
-            Restore-Snapshot $CurrentSnapshot $live
+            Restore-Snapshot $rollbackSnapshot $live
             Clear-Recovery
-        } catch { return @{ ok = $false; message_code = 'rollback_failed'; recovery_path = $CurrentSnapshot } }
+        } catch { return @{ ok = $false; message_code = 'rollback_failed'; recovery_path = $rollbackSnapshot } }
         $restarted = $false
         if ($wasRunning) { try { Start-Codex; $restarted = $true } catch {} }
         return @{ ok = $false; message_code = 'switch_rolled_back'; running = $restarted }
@@ -364,6 +494,7 @@ function Invoke-Action {
     $recovery = Get-RecoveryInfo
     if ($recovery.required -and $Action -notin @('inspect', 'usage', 'recover')) { throw 'recovery_required' }
     switch ($Action) {
+        'login' { return Invoke-Login }
         'inspect' { return @{ ok = $true; installed = [bool](Get-CodexExecutable); running = (@(Get-CodexProcesses).Count -gt 0); active_home = $live; account = (Get-HomeInfo $live); recovery_required = $recovery.required } }
         'recover' {
             if (-not $recovery.required) { return @{ ok = $true } }
@@ -412,7 +543,7 @@ function Invoke-Action {
 if (-not $Library) {
     $lock = $null
     try {
-        if ($Action -notin @('inspect', 'usage')) {
+        if ($Action -ne 'inspect') {
             $live = Get-ActiveHome
             [void][IO.Directory]::CreateDirectory($live)
             try { $lock = [IO.File]::Open((Join-Path $live '.hexagonproxy.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
@@ -422,6 +553,7 @@ if (-not $Library) {
     } catch {
         # Exception bodies can contain credentials, so only return stable codes.
         $known = @('unsafe_path', 'snapshot_missing', 'invalid_auth', 'missing_tokens', 'invalid_config', 'not_installed', 'stop_failed', 'backup_failed', 'launch_failed', 'index_failed', 'api_usage_unsupported', 'missing_account_id', 'login_expired', 'usage_forbidden', 'usage_rate_limited', 'usage_failed', 'usage_invalid', 'busy', 'recovery_required', 'state_changed', 'current_auth_unavailable')
+        $known += @('auth_refresh_pending', 'reauthorization_required', 'token_refresh_failed', 'cli_missing', 'login_timeout', 'login_failed')
         $code = 'operation_failed'
         if ($known -contains $_.Exception.Message) { $code = $_.Exception.Message }
         @{ ok = $false; message_code = $code; error_type = $_.Exception.GetType().Name; error_line = $_.InvocationInfo.ScriptLineNumber } | ConvertTo-Json -Compress

@@ -11,6 +11,7 @@ signal capture_requested(display_name: String)
 signal capture_to_requested(profile_id: String)
 signal usage_requested(profile_id: String)
 signal recover_requested
+signal authorize_requested(display_name: String)
 
 const SURFACE := Color("e9fbfbd4")
 const SURFACE_2 := Color("d8f4f3dc")
@@ -36,6 +37,7 @@ var refresh_button: Button
 var launch_button: Button
 var import_button: Button
 var capture_button: Button
+var authorize_button: Button
 var recover_button: Button
 var _file_dialog: FileDialog
 var _row_actions: Array[Button] = []
@@ -105,7 +107,7 @@ func set_busy(busy: bool) -> void:
 	_update_buttons()
 
 func _update_buttons() -> void:
-	for button in [create_button, refresh_button, import_button, capture_button, recover_button]:
+	for button in [create_button, refresh_button, import_button, capture_button, recover_button, authorize_button]:
 		if is_instance_valid(button):
 			button.disabled = _busy
 	if is_instance_valid(profile_name_edit):
@@ -152,6 +154,9 @@ func _build_header_card() -> PanelContainer:
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 8)
 	column.add_child(action_row)
+	authorize_button = ui.small_choice_button("授权添加账号", GREEN)
+	authorize_button.pressed.connect(func() -> void: authorize_requested.emit(profile_name_edit.text.strip_edges()))
+	action_row.add_child(authorize_button)
 	launch_button = ui.small_choice_button("启动当前配置")
 	launch_button.pressed.connect(func() -> void: launch_requested.emit())
 	action_row.add_child(launch_button)
@@ -169,7 +174,7 @@ func _build_header_card() -> PanelContainer:
 	recover_button.pressed.connect(func() -> void: recover_requested.emit())
 	action_row.add_child(recover_button)
 	message_label = ui.label(
-		"新账号：新建配置后切换并登录。已有账号：导入登录文件，或保存当前登录。",
+		"推荐：授权添加账号，在浏览器完成一次官方登录后自动保存，不影响当前账号。之后可从列表切换。",
 		10,
 		MUTED
 	)

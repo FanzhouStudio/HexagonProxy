@@ -120,6 +120,9 @@ func create_profile(display_name: String) -> Dictionary:
 func import_profile(path: String, display_name: String = "") -> Dictionary:
 	return await _import_or_capture("import", path, display_name)
 
+func authorize_profile(display_name: String = "") -> Dictionary:
+	return await _import_or_capture("login", "", display_name)
+
 func _same_identity(left: Dictionary, right: Dictionary) -> bool:
 	var a := str(left.get("account_id", ""))
 	var b := str(right.get("account_id", ""))
@@ -227,7 +230,7 @@ func switch_profile(profile_id: String) -> Dictionary:
 		var saved := await capture_current()
 		if not bool(saved.get("ok", false)):
 			return saved
-	if profile_id == _selected_id:
+	if profile_id == _selected_id and _same_identity(account_store.find(profile_id), live_info):
 		return await launch_selected()
 	var target: Dictionary = account_store.find(profile_id)
 	if target.is_empty():
@@ -289,10 +292,9 @@ func refresh_usage(profile_id: String) -> Dictionary:
 	if profile.is_empty():
 		return _failure("账号不存在。")
 	_busy = true
+	# The helper synchronizes current credentials into the durable account record
+	# before querying, and rotates only inactive credentials to avoid desktop races.
 	var auth_home := profile_path(profile_id)
-	# The running client may have rotated tokens; always read its current auth.
-	if profile_id == _selected_id and _same_identity(profile, _state.get("account", {})):
-		auth_home = _active_home()
 	var result := await _call_helper("usage", {"CodexHome": auth_home})
 	_busy = false
 	if bool(result.get("ok", false)):
@@ -485,6 +487,12 @@ func _execute_helper(args: PackedStringArray) -> Dictionary:
 
 func _message_for_code(code: String) -> String:
 	match code:
+		"auth_refresh_pending": return "授权文件仍保留；当前账号的访问令牌等待 Codex 续期，请在 Codex 中使用后刷新额度。"
+		"reauthorization_required": return "授权续期被拒绝，原 auth.json 已保留。请通过“授权添加账号”重新授权，或导入最新登录。"
+		"token_refresh_failed": return "授权续期暂时失败，登录文件未删除；请检查网络后重试。"
+		"cli_missing": return "未找到 Codex 官方命令行程序，请安装 Codex CLI 或使用导入 auth.json。"
+		"login_timeout": return "授权等待超过 3 分钟，请点击授权添加账号重试；当前登录未改变。"
+		"login_failed": return "官方登录未完成，请关闭其他登录流程后重试；当前登录未改变。"
 		"missing_tokens": return "没有可导入的登录令牌。若使用系统凭据库，请通过 Codex 官方登录生成完整 auth.json 后再导入。"
 		"current_auth_unavailable": return "当前登录使用系统凭据库或登录文件不完整，无法可靠备份。请设置 cli_auth_credentials_store = \"file\" 并通过 Codex 官方流程重新登录后再切换。"
 		"invalid_auth": return "登录文件无效或超过 4 MB，请选择完整的 Codex auth.json。"

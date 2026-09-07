@@ -32,7 +32,7 @@ class TestService extends ServiceScript:
 			return {"ok": false, "message": "simulated failure"}
 		if action == "inspect":
 			return {"ok": true, "installed": true, "running": false, "account": live_info.duplicate(true)}
-		if action in ["prepare", "import", "capture"]:
+		if action in ["prepare", "import", "capture", "login"]:
 			var path := str(parameters["CodexHome"])
 			DirAccess.make_dir_recursive_absolute(path)
 			var file := FileAccess.open(path.path_join("snapshot.json"), FileAccess.WRITE)
@@ -74,6 +74,14 @@ func new_service(label: String):
 
 func _run() -> void:
 	sandbox = OS.get_environment("TEMP").path_join("hexagon-codex-service-%d-%d" % [Time.get_ticks_usec(), randi()])
+	var authorization = new_service("authorization")
+	var authorized: Dictionary = await authorization.authorize_profile("独立授权")
+	check(bool(authorized.get("ok")), "official login result saved")
+	check(authorization.selected_id() == "default", "authorization leaves current selection untouched")
+	var reopened = new_service("authorization")
+	check(reopened.profiles().size() == 2, "authorized account persists across restart")
+	authorization.queue_free()
+	reopened.queue_free()
 	var service = new_service("main")
 	check(service.profiles().size() == 1, "default initialized")
 	check(service.selected_id() == "default", "default selected")
@@ -112,7 +120,7 @@ func _run() -> void:
 	var usage_result: Dictionary = await service.refresh_usage(id)
 	check(bool(usage_result.get("ok")), "real usage result accepted")
 	var usage_call: Dictionary = service.helper_calls.back()
-	check(str(usage_call["parameters"]["CodexHome"]).ends_with("/active"), "selected usage reads live credentials")
+	check(str(usage_call["parameters"]["CodexHome"]) == service.profile_path(id), "usage uses durable account storage; helper synchronizes live credentials")
 	service.helper_failure = "usage"
 	failed = await service.refresh_usage(id)
 	var cached: Dictionary = service.account_store.find(id).get("usage")

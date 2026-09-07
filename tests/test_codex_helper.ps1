@@ -209,4 +209,47 @@ function Invoke-RestMethod { throw 'test-access-private-must-not-escape' }
 $errorCode = ''
 try { $null = Get-Usage $ActiveHome } catch { $errorCode = $_.Exception.Message }
 Assert ($errorCode -eq 'usage_failed') 'network error body redacted'
+New-Fixture 'missing-live'
+Save-Snapshot $ActiveHome $CurrentSnapshot
+[IO.File]::Delete((Join-Path $ActiveHome 'auth.json'))
+$result = Invoke-Switch
+Assert $result.ok 'missing active login does not block switching to saved account'
+Assert ((Read-JsonFile (Join-Path $CurrentSnapshot 'auth.json')).tokens.account_id -eq 'test-account-old') 'logout never deletes saved account'
+
+New-Fixture 'rotation'
+$script:fakeRunning = $false
+$script:refreshCalls = 0
+function Invoke-RestMethod($Uri, $Method, $ContentType, $Body, $TimeoutSec, $MaximumRedirection) {
+    $script:refreshCalls++
+    Assert ($Uri -eq 'https://auth.openai.com/oauth/token') 'refresh uses fixed official endpoint'
+    Assert ($MaximumRedirection -eq 0) 'refresh refuses redirects'
+    return @{ access_token = 'rotated-access'; refresh_token = 'rotated-refresh' }
+}
+$updated = Update-AccountTokens $CodexHome $true
+Assert ($updated.tokens.refresh_token -eq 'rotated-refresh') 'refresh rotation retained'
+Assert ((Read-JsonFile (Join-Path $CodexHome 'auth.json')).tokens.refresh_token -eq 'rotated-refresh') 'refresh rotation persisted'
+Assert-Snapshot $CodexHome
+Assert ((Read-JsonFile (Join-Path $ActiveHome 'auth.json')).tokens.account_id -eq 'test-account-old') 'inactive refresh does not replace active account'
+$null = Update-AccountTokens $CodexHome
+Assert ($script:refreshCalls -eq 1) 'valid access is not refreshed repeatedly'
+
+New-Fixture 'desktop-owner'
+Save-Snapshot $ActiveHome $CurrentSnapshot
+$latest = Fake-Auth 'old'
+$latest.tokens.refresh_token = 'desktop-rotated'
+Write-JsonFile (Join-Path $ActiveHome 'auth.json') $latest
+$null = Update-AccountTokens $CurrentSnapshot
+Assert ((Read-JsonFile (Join-Path $CurrentSnapshot 'auth.json')).tokens.refresh_token -eq 'desktop-rotated') 'latest desktop auth synchronized into durable storage'
+$errorCode = ''
+try { $null = Update-AccountTokens $CurrentSnapshot $true } catch { $errorCode = $_.Exception.Message }
+Assert ($errorCode -eq 'auth_refresh_pending') 'running desktop owns token rotation'
+
+New-Fixture 'refresh-error'
+$before = [IO.File]::ReadAllText((Join-Path $CodexHome 'auth.json'))
+function Invoke-RestMethod { throw 'private-token-error' }
+$errorCode = ''
+try { $null = Update-AccountTokens $CodexHome $true } catch { $errorCode = $_.Exception.Message }
+Assert ($errorCode -eq 'token_refresh_failed') 'refresh error is redacted'
+Assert ([IO.File]::ReadAllText((Join-Path $CodexHome 'auth.json')) -eq $before) 'refresh failure retains auth byte for byte'
+Assert-Snapshot $CodexHome
 Write-Output "PASS: $script:checks Codex helper checks; fixtures: $testRoot"

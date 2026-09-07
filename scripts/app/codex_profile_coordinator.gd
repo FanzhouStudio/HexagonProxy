@@ -23,6 +23,14 @@ func setup(profile_service, accounts_panel: CodexAccountsPanel) -> void:
 	panel.capture_to_requested.connect(_on_capture_to_requested)
 	panel.usage_requested.connect(_on_usage_requested)
 	panel.recover_requested.connect(_on_recover_requested)
+	panel.authorize_requested.connect(_on_authorize_requested)
+
+func _on_authorize_requested(display_name: String) -> void:
+	if _begin("正在打开官方授权页面，请在浏览器完成登录（最多等待 3 分钟）…"):
+		var result: Dictionary = await service.authorize_profile(display_name)
+		if bool(result.get("ok", false)):
+			result["message"] = "授权已独立保存，可从列表切换；当前账号未改变。"
+		await _finish(result)
 
 func start() -> void:
 	_active = true
