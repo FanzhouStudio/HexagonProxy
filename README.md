@@ -11,6 +11,7 @@
 
 <p align="center">
   <img alt="Latest Release" src="https://img.shields.io/github/v/release/FanzhouStudio/HexagonProxy?label=Release">
+  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.1.8-16866f">
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-3478b8">
   <img alt="Godot" src="https://img.shields.io/badge/Godot-4.7-478cbf">
   <img alt="Mihomo" src="https://img.shields.io/badge/Core-Mihomo-16866f">
@@ -23,7 +24,9 @@
   QQ 群：1102815471
 </p>
 
-HexagonProxy 将订阅、节点、系统代理、应用分流、故障切换、内置终端与桌面宠物整合在同一个像素水晶界面中。网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理，客户端负责本地配置、交互与 Windows 集成。
+HexagonProxy 将订阅、节点、系统代理、TUN、应用分流、故障切换、内置终端、Codex 多账号与桌面宠物整合在同一个像素水晶界面中。网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理，客户端负责本地配置、交互与 Windows 集成。
+
+> **v0.1.8**：新增轻量 TUN 全局接管及系统代理互斥切换；重构 Codex 多账号凭证持久化、独立授权、额度展示和事务回滚。
 
 ## 下载与首次使用
 
@@ -38,14 +41,21 @@ HexagonProxy 将订阅、节点、系统代理、应用分流、故障切换、�
 
 **设置 → Mihomo 内核 → 检查并下载最新内核**
 
-正常使用通常不需要管理员权限。当前个人发布版本尚未购买代码签名证书，因此 Windows SmartScreen 或部分安全软件可能显示未知发布者/启发式提示；建议从官方 Releases 下载并核对 SHA256。
+使用 Windows 系统代理时通常不需要管理员权限；使用 TUN 时请以管理员身份运行。当前个人发布版本尚未购买代码签名证书，因此 Windows SmartScreen 或部分安全软件可能显示未知发布者/启发式提示；建议从官方 Releases 下载并核对 SHA256。
+
+当前 v0.1.8 便携版 SHA256：
+
+```text
+8854AF0D1CF614F3887731131E75B99E18671127995A4F5FC88D3C7096B666E5
+```
 
 ### 快速开始
 
 1. 打开“订阅”，添加 Clash/Mihomo 订阅、V2 分享链接或本地 YAML。
 2. 切换到需要使用的配置，在“节点”页选择线路并测速。
-3. 返回“总览”，打开“一键连接”。
-4. 关闭主窗口可继续在系统托盘守护；需要彻底退出时使用右上角“退出”、ESC 退出确认或托盘菜单。
+3. 返回“总览”，打开“一键连接”；默认使用 Windows 系统代理。
+4. 需要接管游戏等忽略系统代理的软件时，以管理员身份运行并在“设置”中启用“TUN 全局接管”。
+5. 关闭主窗口可继续在系统托盘守护；需要彻底退出时使用右上角“退出”、ESC 退出确认或托盘菜单。
 
 ## 主要功能
 
@@ -71,6 +81,15 @@ HexagonProxy 将订阅、节点、系统代理、应用分流、故障切换、�
 - 应用分流：按 Windows `.exe` / 进程名设置直连或走代理。
 - 应用规则优先于普通域名/IP 规则。
 - 支持 Windows 系统代理与 Mihomo TUN 两种互斥接管方式；开启其中一种会自动关闭另一种。
+
+#### TUN 使用方式
+
+1. 右键 `HexagonProxy.exe`，选择“以管理员身份运行”。
+2. 在“总览”启动代理并确认节点可用。
+3. 进入“设置”，开启“TUN 全局接管”。客户端会先关闭 Windows 系统代理，再以 TUN 配置重启 Mihomo。
+4. 如需切回系统代理，直接开启“Windows 系统代理”；客户端会先关闭 TUN，待内核恢复后再启用系统代理。
+
+TUN 使用 Mihomo 顶层配置、`mixed` 协议栈、自动路由、出口识别和 DNS 接管。权限不足或系统代理未能关闭时，切换会被取消并显示原因。若启用后无法联网，请在 Windows 防火墙中允许用户数据目录下的 `runtime/mihomo.exe` 通过网络。
 
 ### 本地网络保护
 
@@ -110,14 +129,14 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 
 ### Codex 账号切换
 
-- 新建账号配置后切换，在 Codex 桌面端完成官方登录；也可导入完整的 `auth.json`。
+- 推荐点击“授权添加账号”，在浏览器完成一次官方登录；也可导入包含完整令牌的 `auth.json`。
 - “保存为独立账号”按登录身份匹配已有账号；新身份保存为新账号，不再覆盖默认栏。空账号栏可点击“将当前登录保存到此账号”，把当前登录绑定到指定栏位。
 - 状态刷新不会替换已保存账号身份；切换前若发现外部更换了登录，会先独立保存新账号，保护旧备份。
 - 切换先关闭 Codex，再保存它最新的登录状态，仅切换 `auth.json` 与 `config.toml`，随后重新启动。聊天历史、SQLite 数据库和插件文件不被复制或覆盖。
 - 每个账号保存自己的配置；导入或新建账号会继承当前配置中的其他设置，并选择 OpenAI provider 和文件凭据存储。
 - 认证、配置或账号索引写入失败，以及桌面启动失败，都会尝试恢复切换前的状态。异常中断后显示“恢复中断切换”入口。
 - 账号卡片直接显示 5 小时、每周剩余额度进度条，以及本地恢复时间和倒计时。保存登录后自动查询一次，仍可点击“查额度”更新。失败时保留上次结果；未知值显示“未知”。API Key 账号不提供 ChatGPT 订阅额度。
-- “授权添加账号”调用本机官方 Codex CLI，在独立 CODEX_HOME 中完成浏览器登录，保存后再切换，不替换当前登录。活动 auth.json 缺失或退出登录不会删除账号备份。
+- “授权添加账号”调用本机官方 Codex CLI，在独立 `CODEX_HOME` 中完成浏览器登录并保存到账号库，不替换当前登录。活动 `auth.json` 缺失或退出登录不会删除账号备份。
 - 登录文件只保存在本机。额度查询和续期仅请求固定的 OpenAI 官方地址，令牌不进入界面、账号索引或错误输出。同一 OpenAI 身份只使用时间最新的授权，更新后同步到该身份的其他本地配置，避免旧 refresh token 副本被重复使用。备用账号在访问令牌临近过期或额度接口返回 401 时尝试续期；运行中的账号由 Codex 自己续期。续期失败保留原文件；授权被服务端撤销或拒绝时仍需重新授权。
 - 支持 `CODEX_HOME`，兼容旧版独立账号目录；迁移只复制认证与配置，保留原始目录。移除账号只删除列表入口。
 - 当前切换使用文件凭据。若当前登录使用 `keyring` / `auto` 或 `auth.json` 不完整，会在修改前提示先设置 `cli_auth_credentials_store = "file"` 并重新登录，确保原账号能够恢复。
@@ -161,7 +180,7 @@ UI Panels
 Coordinators
     ↓
 Services / Modules
-    ├─ Proxy / Mihomo
+    ├─ Proxy / Mihomo / TUN
     ├─ Subscription
     ├─ Routing / Failover
     ├─ System Proxy / Ports
@@ -169,7 +188,7 @@ Services / Modules
     └─ Theme / Runtime Profile Pipeline
 ```
 
-应用分流、动态端口等运行时配置通过 `RuntimeProfilePipeline` 组合，便于后续扩展而不把逻辑重新堆回主控制器。
+TUN、应用分流、动态端口等运行时配置通过 `RuntimeProfilePipeline` 组合，便于后续扩展而不把逻辑重新堆回主控制器。
 
 <details>
 <summary><strong>从源码运行与构建</strong></summary>
