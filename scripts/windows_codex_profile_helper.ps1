@@ -8,6 +8,7 @@
     [string]$IndexPath = '',
     [string]$PendingIndex = '',
     [string]$ExpectedProfileId = '',
+    [string]$RelatedHomes = '',
     [switch]$Library
 )
 
@@ -138,7 +139,7 @@ function Test-SameAccount($First, $Second) {
 
 # Account credentials are durable records, unlike exact rollback snapshots.
 # A logout/missing live file must never erase a saved authorization.
-function Sync-AccountAuth($Source, $Target) {
+function Sync-AccountCredentials($Source, $Target) {
     Assert-DifferentDirectories $Source $Target
     $sourceFile = Join-Path $Source 'auth.json'
     if (-not [IO.File]::Exists($sourceFile)) { return }
@@ -150,9 +151,67 @@ function Sync-AccountAuth($Source, $Target) {
         if (-not (Test-SameAccount $auth (Read-JsonFile $targetFile))) { throw 'state_changed' }
     }
     Write-Atomic $targetFile $bytes
+    Write-SnapshotManifest $Target
+}
+
+function Sync-AccountState($Source, $Target) {
+    Sync-AccountCredentials $Source $Target
     $config = Join-Path $Source 'config.toml'
     if ([IO.File]::Exists($config)) { Write-Atomic (Join-Path $Target 'config.toml') ([IO.File]::ReadAllBytes($config)) }
     Write-SnapshotManifest $Target
+}
+
+function Get-AuthFreshness($Auth) {
+    $score = 0L
+    $claims = Read-Claims ([string]$Auth.tokens.access_token)
+    if ($claims -and $claims.exp) { $score = [Math]::Max($score, [long]$claims.exp) }
+    if ($Auth.last_refresh) {
+        $timestamp = [DateTimeOffset]::MinValue
+        if ([DateTimeOffset]::TryParse([string]$Auth.last_refresh, [ref]$timestamp)) {
+            $score = [Math]::Max($score, $timestamp.ToUnixTimeSeconds())
+        } elseif ([long]::TryParse([string]$Auth.last_refresh, [ref]$score)) {}
+    }
+    return $score
+}
+
+function Get-RelatedHomeList {
+    if (-not $RelatedHomes) { return @() }
+    return @($RelatedHomes.Split('|', [StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [IO.Path]::GetFullPath($_) } | Select-Object -Unique)
+}
+
+function Sync-LatestAccountCredentials($Path) {
+    $reference = Read-JsonFile (Join-Path $Path 'auth.json')
+    $null = Get-AuthInfo $reference
+    $bestPath = [IO.Path]::GetFullPath($Path)
+    $bestAuth = $reference
+    $bestScore = Get-AuthFreshness $reference
+    foreach ($candidatePath in @((Get-ActiveHome)) + @(Get-RelatedHomeList)) {
+        $candidateFile = Join-Path $candidatePath 'auth.json'
+        if (-not [IO.File]::Exists($candidateFile)) { continue }
+        try {
+            $candidate = Read-JsonFile $candidateFile
+            if (-not (Test-SameAccount $reference $candidate)) { continue }
+        } catch { continue }
+        $score = Get-AuthFreshness $candidate
+        if ($score -gt $bestScore) { $bestPath = $candidatePath; $bestAuth = $candidate; $bestScore = $score }
+    }
+    if (-not [IO.Path]::GetFullPath($bestPath).Equals([IO.Path]::GetFullPath($Path), [StringComparison]::OrdinalIgnoreCase)) {
+        Sync-AccountCredentials $bestPath $Path
+        $bestAuth = Read-JsonFile (Join-Path $Path 'auth.json')
+    }
+    return $bestAuth
+}
+
+function Publish-AccountCredentials($Source) {
+    $sourceAuth = Read-JsonFile (Join-Path $Source 'auth.json')
+    foreach ($candidatePath in @(Get-RelatedHomeList)) {
+        $candidateFile = Join-Path $candidatePath 'auth.json'
+        if (-not [IO.File]::Exists($candidateFile)) { continue }
+        try {
+            $candidate = Read-JsonFile $candidateFile
+            if (Test-SameAccount $sourceAuth $candidate) { Sync-AccountCredentials $Source $candidatePath }
+        } catch { continue }
+    }
 }
 
 function Test-AccessExpired($Auth) {
@@ -162,7 +221,7 @@ function Test-AccessExpired($Auth) {
 
 function Update-AccountTokens($Path, [bool]$Force = $false) {
     $file = Join-Path $Path 'auth.json'
-    $auth = Read-JsonFile $file
+    $auth = Sync-LatestAccountCredentials $Path
     $info = Get-AuthInfo $auth
     if ($info.auth_kind -eq 'api') { return $auth }
     $live = Get-ActiveHome
@@ -173,11 +232,13 @@ function Update-AccountTokens($Path, [bool]$Force = $false) {
         $current = Read-JsonFile $liveFile
         $active = Test-SameAccount $auth $current
         if ($active -and -not $samePath) {
-            Sync-AccountAuth $live $Path
-            $auth = Read-JsonFile $file
+            $auth = Sync-LatestAccountCredentials $Path
         }
     }
-    if (-not $Force -and -not (Test-AccessExpired $auth)) { return $auth }
+    if (-not $Force -and -not (Test-AccessExpired $auth)) {
+        Publish-AccountCredentials $Path
+        return $auth
+    }
     # Do not race the desktop app's rotating refresh token. It owns active auth.
     if ($active -and @(Get-CodexProcesses).Count -gt 0) { throw 'auth_refresh_pending' }
     $before = [IO.File]::ReadAllText($file)
@@ -210,6 +271,7 @@ function Update-AccountTokens($Path, [bool]$Force = $false) {
             if ($latest.tokens.refresh_token -eq $auth.tokens.refresh_token) { Write-JsonFile $liveFile $updated }
         }
     }
+    Publish-AccountCredentials $Path
     return $updated
 }
 
@@ -240,11 +302,12 @@ function Invoke-Login {
     try {
         $outTask = $process.StandardOutput.ReadToEndAsync()
         $errTask = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'login_timeout' }
+        if (-not $process.WaitForExit(900000)) { $process.Kill(); throw 'login_timeout' }
         if ($process.ExitCode -ne 0) { throw 'login_failed' }
         $info = Get-HomeInfo $CodexHome
         if (-not $info.login_present) { throw 'missing_tokens' }
         Write-SnapshotManifest $CodexHome
+        Publish-AccountCredentials $CodexHome
         return @{ ok = $true; account = $info }
     } finally { $process.Dispose() }
 }
@@ -456,7 +519,7 @@ function Invoke-Switch {
     $rollbackSnapshot = Join-Path $live ('.hexagonproxy-rollback-' + [guid]::NewGuid().ToString('N'))
     try {
         Save-Snapshot $live $rollbackSnapshot
-        Sync-AccountAuth $live $CurrentSnapshot
+        Sync-AccountState $live $CurrentSnapshot
     }
     catch {
         if ($wasRunning) { try { Start-Codex } catch {} }
@@ -514,6 +577,7 @@ function Invoke-Action {
             $info = Get-HomeInfo $live
             if (-not $info.login_present) { throw 'missing_tokens' }
             Save-Snapshot $live $CodexHome
+            Publish-AccountCredentials $CodexHome
             return @{ ok = $true; account = $info; message_code = 'captured' }
         }
         { $_ -in @('import', 'prepare') } {
@@ -549,13 +613,15 @@ if (-not $Library) {
             try { $lock = [IO.File]::Open((Join-Path $live '.hexagonproxy.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
             catch { throw 'busy' }
         }
-        Invoke-Action | ConvertTo-Json -Compress -Depth 12
+        $result = Invoke-Action
     } catch {
         # Exception bodies can contain credentials, so only return stable codes.
         $known = @('unsafe_path', 'snapshot_missing', 'invalid_auth', 'missing_tokens', 'invalid_config', 'not_installed', 'stop_failed', 'backup_failed', 'launch_failed', 'index_failed', 'api_usage_unsupported', 'missing_account_id', 'login_expired', 'usage_forbidden', 'usage_rate_limited', 'usage_failed', 'usage_invalid', 'busy', 'recovery_required', 'state_changed', 'current_auth_unavailable')
         $known += @('auth_refresh_pending', 'reauthorization_required', 'token_refresh_failed', 'cli_missing', 'login_timeout', 'login_failed')
         $code = 'operation_failed'
         if ($known -contains $_.Exception.Message) { $code = $_.Exception.Message }
-        @{ ok = $false; message_code = $code; error_type = $_.Exception.GetType().Name; error_line = $_.InvocationInfo.ScriptLineNumber } | ConvertTo-Json -Compress
+        $result = @{ ok = $false; message_code = $code; error_type = $_.Exception.GetType().Name; error_line = $_.InvocationInfo.ScriptLineNumber }
     } finally { if ($lock) { $lock.Dispose() } }
+    $result | ConvertTo-Json -Compress -Depth 12
+    exit 0
 }

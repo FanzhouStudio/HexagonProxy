@@ -30,6 +30,7 @@ class FakeSettings:
 	signal core_update_requested
 	signal ports_apply_requested(mixed_port: int, controller_port: int)
 	signal port_random_requested(kind: String)
+	signal window_settings_apply_requested(borderless: bool, width: int, height: int)
 	var blocked_messages: Array[String] = []
 	var port_messages: Array[String] = []
 	var port_values := Vector2i.ZERO
@@ -45,6 +46,7 @@ class FakeSettings:
 class FakeConfig:
 	var mixed := 7890
 	var controller := 19090
+	func set_window_settings(_borderless: bool, _width: int, _height: int) -> void: pass
 	func mixed_port() -> int: return mixed
 	func controller_port() -> int: return controller
 	func set_ports(mixed_port: int, controller_port: int) -> Dictionary:

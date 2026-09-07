@@ -42,6 +42,7 @@ var recover_button: Button
 var _file_dialog: FileDialog
 var _row_actions: Array[Button] = []
 var _reset_labels: Array[Label] = []
+var _profile_count := 0
 var _countdown_elapsed := 0.0
 
 func _process(delta: float) -> void:
@@ -216,6 +217,7 @@ func _rebuild_profiles(profiles: Array) -> void:
 		child.queue_free()
 	_row_actions.clear()
 	_reset_labels.clear()
+	_profile_count = profiles.size()
 	for raw in profiles:
 		if raw is Dictionary:
 			profile_list.add_child(_profile_row(raw as Dictionary))
@@ -280,13 +282,12 @@ func _profile_row(profile: Dictionary) -> Control:
 		save_button.pressed.connect(func() -> void: capture_to_requested.emit(str(profile.get("id", ""))))
 		_row_actions.append(save_button)
 		row.add_child(save_button)
-	if not bool(profile.get("builtin", false)):
-		var forget := ui.small_choice_button("移除", ui.danger_color)
-		forget.tooltip_text = "只从列表移除，不删除 Codex profile 数据"
-		forget.pressed.connect(_request_forget.bind(profile.duplicate(true)))
-		forget.set_meta("unavailable", selected)
-		_row_actions.append(forget)
-		row.add_child(forget)
+	var forget := ui.small_choice_button("移除", ui.danger_color)
+	forget.tooltip_text = "只从列表移除，不删除 Codex profile 数据"
+	forget.pressed.connect(_request_forget.bind(profile.duplicate(true)))
+	forget.set_meta("unavailable", selected or _profile_count <= 1)
+	_row_actions.append(forget)
+	row.add_child(forget)
 	return card
 
 func _request_create() -> void:

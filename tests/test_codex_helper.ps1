@@ -163,6 +163,7 @@ Assert (-not [IO.File]::Exists((Join-Path $importRoot 'active\auth.json'))) 'imp
 Assert-Snapshot (Join-Path $importRoot 'snapshot')
 Write-Text $fakePath '{"tokens": {}}'
 $json = & powershell.exe -NoLogo -NoProfile -NonInteractive -File $scriptPath -Action import -ActiveHome (Join-Path $importRoot 'active') -CodexHome (Join-Path $importRoot 'invalid') -ImportPath $fakePath
+Assert ($LASTEXITCODE -eq 0) 'handled helper error returns structured result with zero process exit'
 Assert (-not ($json | ConvertFrom-Json).ok) 'incomplete auth rejected'
 New-Fixture 'interrupted'
 Save-Snapshot $ActiveHome $CurrentSnapshot
@@ -237,6 +238,7 @@ New-Fixture 'desktop-owner'
 Save-Snapshot $ActiveHome $CurrentSnapshot
 $latest = Fake-Auth 'old'
 $latest.tokens.refresh_token = 'desktop-rotated'
+$latest | Add-Member -NotePropertyName last_refresh -NotePropertyValue '2026-09-07T06:30:00Z'
 Write-JsonFile (Join-Path $ActiveHome 'auth.json') $latest
 $null = Update-AccountTokens $CurrentSnapshot
 Assert ((Read-JsonFile (Join-Path $CurrentSnapshot 'auth.json')).tokens.refresh_token -eq 'desktop-rotated') 'latest desktop auth synchronized into durable storage'
@@ -252,4 +254,20 @@ try { $null = Update-AccountTokens $CodexHome $true } catch { $errorCode = $_.Ex
 Assert ($errorCode -eq 'token_refresh_failed') 'refresh error is redacted'
 Assert ([IO.File]::ReadAllText((Join-Path $CodexHome 'auth.json')) -eq $before) 'refresh failure retains auth byte for byte'
 Assert-Snapshot $CodexHome
+
+New-Fixture 'related-newer'
+$script:RelatedHomes = (Join-Path $testRoot 'related-newer\sibling')
+Save-Snapshot $CodexHome $RelatedHomes
+$newer = Fake-Auth 'new'
+$newer.tokens.access_token = 'newer-access'
+$newer.tokens.refresh_token = 'newer-refresh'
+$newer | Add-Member -NotePropertyName last_refresh -NotePropertyValue '2026-09-07T07:30:00Z'
+Write-JsonFile (Join-Path $RelatedHomes 'auth.json') $newer
+$older = Read-JsonFile (Join-Path $CodexHome 'auth.json')
+$older | Add-Member -NotePropertyName last_refresh -NotePropertyValue '2026-09-07T06:30:00Z'
+Write-JsonFile (Join-Path $CodexHome 'auth.json') $older
+$synced = Update-AccountTokens $CodexHome
+Assert ($synced.tokens.refresh_token -eq 'newer-refresh') 'newest same-account authorization selected'
+Assert ((Read-JsonFile (Join-Path $CodexHome 'auth.json')).tokens.refresh_token -eq 'newer-refresh') 'newest authorization repairs stale duplicate'
+$script:RelatedHomes = ''
 Write-Output "PASS: $script:checks Codex helper checks; fixtures: $testRoot"

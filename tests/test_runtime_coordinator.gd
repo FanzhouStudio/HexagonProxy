@@ -4,8 +4,16 @@ const RuntimeCoordinatorScript = preload("res://scripts/app/runtime_coordinator.
 
 class FakeProxyConfig:
 	var core_available := true
+	var tun := false
 	func has_core() -> bool:
 		return core_available
+	func controller_host() -> String: return "127.0.0.1"
+	func mixed_port() -> int: return 7890
+	func tun_enabled() -> bool: return tun
+	func set_tun_enabled(value: bool) -> bool:
+		tun = value
+		return true
+	func has_tun_permission() -> bool: return true
 
 class FakeProxy:
 	var config = FakeProxyConfig.new()
@@ -40,10 +48,12 @@ class FakeSystemProxy:
 	signal status_changed(enabled: bool)
 	signal busy_changed(busy: bool)
 	var enabled := false
+	var busy := false
 	func is_enabled() -> bool: return enabled
 	func set_enabled(value: bool) -> void:
 		enabled = value
 		status_changed.emit(value)
+	func reconcile() -> void: pass
 
 class FakeDashboard:
 	signal connect_requested(enabled: bool)
@@ -51,11 +61,13 @@ class FakeDashboard:
 	var pressed := false
 	var last_mode := ""
 	var profile_name := ""
+	var network_healthy := false
 	func set_status(_online: bool, _starting: bool, _message: String) -> void: pass
 	func set_connect_pressed(value: bool) -> void: pressed = value
 	func apply_connections(_payload: Dictionary) -> void: pass
 	func set_mode(mode: String) -> void: last_mode = mode
 	func set_profile_name(value: String) -> void: profile_name = value
+	func set_network_health(value: bool, _message: String) -> void: network_healthy = value
 	func push_zero_sample() -> void: pass
 
 class FakeNodes:
@@ -96,18 +108,26 @@ class FakeAutostart:
 
 class FakeSettings:
 	signal system_proxy_intent_changed(enabled: bool)
+	signal tun_intent_changed(enabled: bool)
 	signal core_restart_requested
 	signal core_update_requested
 	var rejected_proxy_messages: Array[String] = []
 	var blocked_update_messages: Array[String] = []
 	var proxy_enabled := false
 	var proxy_busy := false
+	var tun_enabled := false
+	var tun_busy := false
 	var core_progress := -2.0
 	var core_progress_message := ""
 	func reject_system_proxy_enable(message: String) -> void: rejected_proxy_messages.append(message)
 	func show_core_update_blocked(message: String) -> void: blocked_update_messages.append(message)
 	func set_system_proxy_state(value: bool) -> void: proxy_enabled = value
 	func set_system_proxy_busy(value: bool) -> void: proxy_busy = value
+	func set_tun_state(value: bool) -> void: tun_enabled = value
+	func set_tun_busy(value: bool) -> void: tun_busy = value
+	func reject_tun_enable(message: String) -> void:
+		rejected_proxy_messages.append(message)
+		tun_enabled = false
 	func set_core_update_progress(value: float, message: String) -> void:
 		core_progress = value
 		core_progress_message = message
@@ -175,11 +195,25 @@ func _run() -> void:
 	if not system_proxy.enabled:
 		_fail("系统代理开启意图没有交给协调器执行", 5)
 		return
+	settings.tun_intent_changed.emit(true)
+	if system_proxy.enabled or not proxy.config.tun or mihomo.restarts != 1:
+		_fail("TUN 没有先关闭系统代理并重启内核", 5)
+		return
+	mihomo.online = true
+	mihomo.state_changed.emit(true, false, 1234, "在线")
+	settings.system_proxy_intent_changed.emit(true)
+	if proxy.config.tun or system_proxy.enabled or mihomo.restarts != 2:
+		_fail("系统代理没有先关闭 TUN 并等待内核重启", 5)
+		return
+	mihomo.state_changed.emit(true, false, 1234, "在线")
+	if not system_proxy.enabled:
+		_fail("关闭 TUN 后没有自动开启系统代理", 5)
+		return
 
 	subscription.profile_changed.emit("测试订阅")
 	subscription.restart_requested.emit()
 	subscription.api_request_requested.emit("update_provider", "/provider", 2, "")
-	if dashboard.profile_name != "测试订阅" or mihomo.restarts != 1 or "update_provider" not in mihomo.requests:
+	if dashboard.profile_name != "测试订阅" or mihomo.restarts != 3 or "update_provider" not in mihomo.requests:
 		_fail("订阅运行时事件没有统一协调", 5)
 		return
 

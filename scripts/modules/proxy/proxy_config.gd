@@ -17,6 +17,7 @@ const ROUTING_RULE_SOURCE_DIR := "res://third_party/meta-rules-dat"
 
 var _mixed_port := DEFAULT_MIXED_PORT
 var _controller_port := DEFAULT_CONTROLLER_PORT
+var _tun_enabled := false
 var _window_borderless := true
 var _window_width := 1920
 var _window_height := 1080
@@ -47,6 +48,27 @@ func controller_port() -> int:
 
 func mixed_port() -> int:
 	return _mixed_port
+
+func tun_enabled() -> bool:
+	return _tun_enabled
+
+func set_tun_enabled(value: bool) -> bool:
+	var previous := _tun_enabled
+	_tun_enabled = value
+	var settings := ConfigFile.new()
+	settings.load(SETTINGS_PATH)
+	settings.set_value("network", "tun_enabled", value)
+	if settings.save(SETTINGS_PATH) == OK:
+		return true
+	_tun_enabled = previous
+	return false
+
+func has_tun_permission() -> bool:
+	if OS.get_name() != "Windows":
+		return true
+	var output: Array = []
+	var script := "$p=[Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent(); if($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){exit 0}else{exit 1}"
+	return OS.execute("powershell.exe", PackedStringArray(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script]), output, true, false) == 0
 
 func window_borderless() -> bool:
 	return _window_borderless
@@ -119,6 +141,7 @@ func _load_ports() -> void:
 	if _valid_port(mixed) and _valid_port(controller) and mixed != controller:
 		_mixed_port = mixed
 		_controller_port = controller
+	_tun_enabled = bool(settings.get_value("network", "tun_enabled", false))
 	_window_borderless = bool(settings.get_value("window", "borderless", true))
 	_window_width = int(settings.get_value("window", "width", 1920))
 	_window_height = int(settings.get_value("window", "height", 1080))

@@ -18,6 +18,7 @@ const ProxyRecoveryScript = preload("res://scripts/modules/proxy/proxy_recovery.
 const ProxyConfigScript = preload("res://scripts/modules/proxy/proxy_config.gd")
 const RuntimeProfilePipelineScript = preload("res://scripts/modules/proxy/runtime_profile_pipeline.gd")
 const PortProfileTransformerScript = preload("res://scripts/modules/proxy/port_profile_transformer.gd")
+const TunProfileTransformerScript = preload("res://scripts/modules/proxy/tun_profile_transformer.gd")
 
 var process
 var launcher
@@ -27,6 +28,7 @@ var recovery
 var config
 var profile_pipeline
 var port_profile_transformer
+var tun_profile_transformer
 var online := false
 var starting := false
 var api_secret := ""
@@ -49,6 +51,9 @@ func _ensure_components() -> void:
 	port_profile_transformer = PortProfileTransformerScript.new()
 	port_profile_transformer.setup(config)
 	profile_pipeline.register_transformer("runtime_ports", port_profile_transformer, 10)
+	tun_profile_transformer = TunProfileTransformerScript.new()
+	tun_profile_transformer.setup(config)
+	profile_pipeline.register_transformer("tun_mode", tun_profile_transformer, 20)
 	add_child(process)
 	add_child(launcher)
 	add_child(validator)

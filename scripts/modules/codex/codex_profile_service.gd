@@ -123,6 +123,15 @@ func import_profile(path: String, display_name: String = "") -> Dictionary:
 func authorize_profile(display_name: String = "") -> Dictionary:
 	return await _import_or_capture("login", "", display_name)
 
+func _related_homes(exclude_id: String = "") -> String:
+	var homes: Array[String] = []
+	for item in account_store.all():
+		if str(item.get("id", "")) != exclude_id:
+			var path := str(item.get("snapshot_path", ""))
+			if not path.is_empty():
+				homes.append(path)
+	return "|".join(homes)
+
 func _same_identity(left: Dictionary, right: Dictionary) -> bool:
 	var a := str(left.get("account_id", ""))
 	var b := str(right.get("account_id", ""))
@@ -140,7 +149,7 @@ func capture_current(display_name: String = "", target_id: String = "") -> Dicti
 	_busy = true
 	# Capture into a fresh directory first; no existing login can be overwritten.
 	var captured := _new_profile(display_name.strip_edges().left(40))
-	var result := await _call_helper("capture", {"CodexHome": captured["snapshot_path"]})
+	var result := await _call_helper("capture", {"CodexHome": captured["snapshot_path"], "RelatedHomes": _related_homes()})
 	_busy = false
 	if not bool(result.get("ok", false)):
 		return result
@@ -148,11 +157,12 @@ func capture_current(display_name: String = "", target_id: String = "") -> Dicti
 	var target: Dictionary = account_store.find(target_id).duplicate(true)
 	if not target_id.is_empty() and target.is_empty():
 		return _failure("目标账号不存在，登录已保存在独立备份目录。")
-	if target_id.is_empty():
-		for item in account_store.all():
-			if _same_identity(item, info):
-				target = item.duplicate(true)
-				break
+	for item in account_store.all():
+		if _same_identity(item, info):
+			if not target_id.is_empty() and str(item.get("id", "")) != target_id:
+				return _failure("该登录账号已存在于“%s”，请直接切换或重新授权，不能重复保存。" % str(item.get("name", "已有账号")))
+			target = item.duplicate(true)
+			break
 	# Explicitly filling an empty row is allowed; replacing a different saved
 	# identity is not. The old snapshot is always retained, including on save errors.
 	if not target.is_empty() and FileAccess.file_exists(str(target.get("snapshot_path", "")).path_join("auth.json")) and not _same_identity(target, info):
@@ -193,6 +203,7 @@ func _import_or_capture(action: String, path: String, display_name: String) -> D
 	var profile: Dictionary = account_store.find(_selected_id).duplicate(true) if action == "capture" else _new_profile(label)
 	var previous := profile.duplicate(true)
 	var arguments := {"CodexHome": profile["snapshot_path"]}
+	arguments["RelatedHomes"] = _related_homes(str(profile.get("id", "")))
 	if action == "import":
 		arguments["ImportPath"] = path
 	var result := await _call_helper(action, arguments)
@@ -200,6 +211,18 @@ func _import_or_capture(action: String, path: String, display_name: String) -> D
 	if not bool(result.get("ok", false)):
 		return result
 	var info: Dictionary = result.get("account", {})
+	if action != "capture":
+		for existing in account_store.all():
+			if _same_identity(existing, info):
+				var matched: Dictionary = existing.duplicate(true)
+				matched.merge(info, true)
+				matched["usage_error"] = ""
+				if not label.is_empty():
+					matched["name"] = label
+				account_store.update(str(matched["id"]), matched)
+				if not _save_index():
+					return _failure("授权已保存，但账号索引更新失败。")
+				return {"ok": true, "profile_id": matched["id"], "message": "该账号已存在，已更新原账号授权，没有重复添加。"}
 	profile.merge(info, true)
 	if not label.is_empty():
 		profile["name"] = label
@@ -244,6 +267,7 @@ func switch_profile(profile_id: String) -> Dictionary:
 	var result := await _call_helper("switch", {
 		"CodexHome": target["snapshot_path"],
 		"CurrentSnapshot": profile_path(_selected_id),
+		"RelatedHomes": _related_homes(profile_id),
 		"IndexPath": _index_path(), "PendingIndex": pending, "ExpectedProfileId": _selected_id
 	})
 	_busy = false
@@ -295,7 +319,7 @@ func refresh_usage(profile_id: String) -> Dictionary:
 	# The helper synchronizes current credentials into the durable account record
 	# before querying, and rotates only inactive credentials to avoid desktop races.
 	var auth_home := profile_path(profile_id)
-	var result := await _call_helper("usage", {"CodexHome": auth_home})
+	var result := await _call_helper("usage", {"CodexHome": auth_home, "RelatedHomes": _related_homes(profile_id)})
 	_busy = false
 	if bool(result.get("ok", false)):
 		var patch: Dictionary = result.get("account", {}).duplicate(true)
@@ -316,8 +340,8 @@ func refresh_usage(profile_id: String) -> Dictionary:
 func forget_profile(profile_id: String) -> Dictionary:
 	if not _can_mutate():
 		return _failure(_blocked_message())
-	if profile_id == DEFAULT_PROFILE_ID:
-		return _failure("默认账号配置不能移除。")
+	if account_store.all().size() <= 1:
+		return _failure("至少需要保留一个账号配置。")
 	if profile_id == _selected_id:
 		return _failure("请先切换到其他账号，再移除当前配置。")
 	var previous: Array = account_store.all()
@@ -339,10 +363,21 @@ func _new_profile(label: String) -> Dictionary:
 		"usage": {"five_hour": -1, "weekly": -1, "updated_at": ""}
 	}
 
+func _default_profile() -> Dictionary:
+	return {"id": DEFAULT_PROFILE_ID, "name": "默认账号",
+		"snapshot_path": _managed_root().path_join("accounts/default")}
+
+func _identity_key(item: Dictionary) -> String:
+	var account_id := str(item.get("account_id", "")).strip_edges().to_lower()
+	if not account_id.is_empty():
+		return "id:" + account_id
+	var email := str(item.get("email", "")).strip_edges().to_lower()
+	return "email:" + email if not email.is_empty() else ""
+
 func _load_index() -> void:
-	var items: Array = [{"id": DEFAULT_PROFILE_ID, "name": "默认账号", "builtin": true,
-		"snapshot_path": _managed_root().path_join("accounts/default")}]
-	_selected_id = DEFAULT_PROFILE_ID
+	var items: Array = []
+	var requested_selected := ""
+	var rewrite_index := false
 	_load_error = ""
 	if FileAccess.file_exists(_index_path()):
 		var parser := JSON.new()
@@ -352,7 +387,8 @@ func _load_index() -> void:
 			_load_error = "账号索引损坏，请先恢复 codex_profiles.json 备份；原文件未覆盖。"
 		else:
 			_active_override = str(data.get("active_home", ""))
-			var seen := {DEFAULT_PROFILE_ID: true}
+			requested_selected = str(data.get("selected_id", ""))
+			var seen := {}
 			for raw in data.get("accounts", data.get("profiles", [])):
 				if not raw is Dictionary:
 					continue
@@ -364,21 +400,45 @@ func _load_index() -> void:
 				if str(item.get("snapshot_path", "")).is_empty():
 					var legacy_home := str(item.get("codex_home", ""))
 					item["snapshot_path"] = _managed_root().path_join("accounts").path_join(id)
-					if not legacy_home.is_empty() and id != DEFAULT_PROFILE_ID:
+					if not legacy_home.is_empty():
 						if not _migrate_snapshot(legacy_home, str(item["snapshot_path"])):
 							_load_error = "旧账号备份迁移失败，请检查目录权限；原账号文件未改变。"
 						if id == str(data.get("selected_id", "")) and _active_override.is_empty():
 							_active_override = legacy_home
-				if id == DEFAULT_PROFILE_ID:
-					items[0].merge(item, true)
-					items[0]["builtin"] = true
-				elif not seen.has(id):
+				item.erase("builtin")
+				if not seen.has(id):
 					seen[id] = true
 					items.append(item)
-			var selected := str(data.get("selected_id", DEFAULT_PROFILE_ID))
-			if seen.has(selected):
-				_selected_id = selected
+	else:
+		items.append(_default_profile())
+		requested_selected = DEFAULT_PROFILE_ID
+	if items.is_empty():
+		items.append(_default_profile())
+		requested_selected = DEFAULT_PROFILE_ID
+		rewrite_index = FileAccess.file_exists(_index_path()) and _load_error.is_empty()
+	# Older releases allowed the same OpenAI identity in several rows. Prefer the
+	# selected row, otherwise retain the first row, and keep all snapshot folders.
+	var identity_owner := {}
+	for item in items:
+		var key := _identity_key(item)
+		if key.is_empty() or not identity_owner.has(key) or str(item.get("id", "")) == requested_selected:
+			identity_owner[key] = str(item.get("id", ""))
+	var unique_items: Array = []
+	for item in items:
+		var key := _identity_key(item)
+		if key.is_empty() or str(identity_owner.get(key, "")) == str(item.get("id", "")):
+			unique_items.append(item)
+		else:
+			rewrite_index = true
+	items = unique_items
+	_selected_id = str(items[0].get("id", DEFAULT_PROFILE_ID))
+	for item in items:
+		if str(item.get("id", "")) == requested_selected:
+			_selected_id = requested_selected
+			break
 	account_store.load_accounts(items)
+	if rewrite_index and _load_error.is_empty():
+		_save_index()
 
 func _migrate_snapshot(source: String, target: String) -> bool:
 	if FileAccess.file_exists(target.path_join("snapshot.json")):
@@ -471,6 +531,8 @@ func _call_helper(action: String, parameters: Dictionary = {}) -> Dictionary:
 			return _failure("应用正在退出。")
 	var result: Dictionary = thread.wait_to_finish()
 	_worker = null
+	# PowerShell can preserve a handled child-process exit code. Prefer its
+	# structured, redacted JSON result whenever one was produced.
 	if not bool(result.get("ok", false)) and not result.has("message"):
 		result["message"] = _message_for_code(str(result.get("message_code", "")))
 	return result
@@ -478,12 +540,12 @@ func _call_helper(action: String, parameters: Dictionary = {}) -> Dictionary:
 func _execute_helper(args: PackedStringArray) -> Dictionary:
 	var output: Array = []
 	var code := OS.execute("powershell.exe", args, output, true, false)
-	if code != 0:
-		return _failure("Codex 操作助手执行失败。")
 	var parser := JSON.new()
 	var parse_error := parser.parse("\n".join(output).strip_edges().trim_prefix("\ufeff"))
 	var parsed: Variant = parser.data if parse_error == OK else null
-	return parsed if parsed is Dictionary else _failure("Codex 操作助手返回异常。")
+	if parsed is Dictionary:
+		return parsed
+	return _failure("Codex 操作助手执行失败（退出码 %d）。" % code) if code != 0 else _failure("Codex 操作助手返回异常。")
 
 func _message_for_code(code: String) -> String:
 	match code:
@@ -491,7 +553,7 @@ func _message_for_code(code: String) -> String:
 		"reauthorization_required": return "授权续期被拒绝，原 auth.json 已保留。请通过“授权添加账号”重新授权，或导入最新登录。"
 		"token_refresh_failed": return "授权续期暂时失败，登录文件未删除；请检查网络后重试。"
 		"cli_missing": return "未找到 Codex 官方命令行程序，请安装 Codex CLI 或使用导入 auth.json。"
-		"login_timeout": return "授权等待超过 3 分钟，请点击授权添加账号重试；当前登录未改变。"
+		"login_timeout": return "授权等待超过 15 分钟，请点击授权添加账号重试；当前登录未改变。"
 		"login_failed": return "官方登录未完成，请关闭其他登录流程后重试；当前登录未改变。"
 		"missing_tokens": return "没有可导入的登录令牌。若使用系统凭据库，请通过 Codex 官方登录生成完整 auth.json 后再导入。"
 		"current_auth_unavailable": return "当前登录使用系统凭据库或登录文件不完整，无法可靠备份。请设置 cli_auth_credentials_store = \"file\" 并通过 Codex 官方流程重新登录后再切换。"

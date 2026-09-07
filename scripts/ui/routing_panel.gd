@@ -53,7 +53,7 @@ func _build_intro_card() -> PanelContainer:
 	words.add_theme_constant_override("separation", 5)
 	row.add_child(words)
 	words.add_child(ui.label("应用分流", 18, TEXT))
-	var desc := ui.label("按 Windows 程序决定直连或走代理。当前仅对进入 HexagonProxy 的流量生效；忽略系统代理的游戏等程序后续需要 TUN 模式。", 11, MUTED)
+	var desc := ui.label("按 Windows 程序决定直连或走代理。忽略系统代理的软件请在设置中启用 TUN 全局接管。", 11, MUTED)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	words.add_child(desc)
 	message_label = ui.label("选择一个 .exe 后即可创建规则。", 10, MUTED)

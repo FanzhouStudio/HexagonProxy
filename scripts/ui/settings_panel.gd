@@ -2,6 +2,7 @@ class_name SettingsPanel
 extends Node
 
 signal system_proxy_intent_changed(enabled: bool)
+signal tun_intent_changed(enabled: bool)
 signal ports_apply_requested(mixed_port: int, controller_port: int)
 signal port_random_requested(kind: String)
 signal port_release_requested(kind: String, port: int)
@@ -29,6 +30,8 @@ var proxy_config
 var _prompt_host: Control
 var _system_proxy_enabled := false
 var proxy_toggle: CheckButton
+var tun_toggle: CheckButton
+var tun_hint_label: Label
 var mixed_port_spin: SpinBox
 var controller_port_spin: SpinBox
 var system_proxy_hint_label: Label
@@ -192,6 +195,20 @@ func _build_behavior_card() -> PanelContainer:
 	proxy_toggle.set_pressed_no_signal(_system_proxy_enabled)
 	proxy_toggle.toggled.connect(_on_system_proxy_toggled)
 	proxy_row.add_child(proxy_toggle)
+	var tun_row := HBoxContainer.new()
+	column.add_child(tun_row)
+	var tun_words := VBoxContainer.new()
+	tun_words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tun_row.add_child(tun_words)
+	tun_words.add_child(ui.label("TUN 全局接管", 14, TEXT))
+	tun_hint_label = ui.label("覆盖忽略系统代理的软件 · 需要管理员权限", 11, MUTED)
+	tun_words.add_child(tun_hint_label)
+	tun_toggle = CheckButton.new()
+	tun_toggle.text = "启用"
+	ui.apply_crystal_toggle_theme(tun_toggle)
+	tun_toggle.set_pressed_no_signal(proxy_config.tun_enabled())
+	tun_toggle.toggled.connect(_on_tun_toggled)
+	tun_row.add_child(tun_toggle)
 	var port_row := HBoxContainer.new()
 	port_row.add_theme_constant_override("separation", 8)
 	column.add_child(port_row)
@@ -370,6 +387,9 @@ func show_port_message(message: String, success: bool) -> void:
 func _on_system_proxy_toggled(enabled: bool) -> void:
 	system_proxy_intent_changed.emit(enabled)
 
+func _on_tun_toggled(enabled: bool) -> void:
+	tun_intent_changed.emit(enabled)
+
 func reject_system_proxy_enable(message: String) -> void:
 	set_system_proxy_state(false)
 	log_message.emit(message)
@@ -378,6 +398,22 @@ func set_system_proxy_state(enabled: bool) -> void:
 	_system_proxy_enabled = enabled
 	if is_instance_valid(proxy_toggle):
 		proxy_toggle.set_pressed_no_signal(enabled)
+
+func set_tun_state(enabled: bool) -> void:
+	if is_instance_valid(tun_toggle):
+		tun_toggle.set_pressed_no_signal(enabled)
+
+func reject_tun_enable(message: String) -> void:
+	set_tun_state(false)
+	if is_instance_valid(tun_hint_label):
+		tun_hint_label.text = message
+		tun_hint_label.add_theme_color_override("font_color", ui.danger_color)
+	log_message.emit(message)
+
+func set_tun_busy(busy: bool) -> void:
+	if is_instance_valid(tun_toggle):
+		tun_toggle.disabled = busy
+		tun_toggle.text = "重启中…" if busy else "启用"
 
 func set_system_proxy_busy(busy: bool) -> void:
 	if is_instance_valid(proxy_toggle):
