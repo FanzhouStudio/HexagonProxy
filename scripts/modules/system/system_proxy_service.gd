@@ -17,6 +17,7 @@ var enabled := false
 var busy := false
 var process_id := -1
 var _target := false
+var _reconciling := false
 var _pending: Variant = null
 var _started_msec := 0
 var _state_captured := false
@@ -35,7 +36,11 @@ func initialize() -> void:
 	_state_captured = FileAccess.file_exists(state_path())
 	enabled = _state_captured
 
-func set_enabled(value: bool) -> void:
+func reconcile() -> void:
+	if not busy and not _shutting_down:
+		set_enabled(true, true)
+
+func set_enabled(value: bool, reconcile_only: bool = false) -> void:
 	_ensure_config()
 	if OS.get_name() != "Windows":
 		event_logged.emit("当前版本的系统代理开关仅支持 Windows。")
@@ -43,7 +48,7 @@ func set_enabled(value: bool) -> void:
 	if busy:
 		_pending = value
 		return
-	if value == enabled:
+	if value == enabled and not reconcile_only:
 		status_changed.emit(enabled)
 		return
 	if not value and not _state_captured:
@@ -54,8 +59,11 @@ func set_enabled(value: bool) -> void:
 		_install_helper()
 	busy = true
 	_target = value
+	_reconciling = reconcile_only
 	busy_changed.emit(true)
 	var action := "enable" if value else "disable"
+	if reconcile_only:
+		action = "ensure"
 	process_id = OS.create_process("powershell.exe", PackedStringArray([
 		"-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
 		"-File", helper_path(), action, state_path(),
@@ -99,8 +107,11 @@ func _finish(success: bool, timed_out: bool) -> void:
 	if success:
 		enabled = _target
 		_state_captured = FileAccess.file_exists(state_path())
-		event_logged.emit("系统代理已%s。" % ("开启" if enabled else "关闭"))
+		if not _reconciling:
+			event_logged.emit("系统代理已%s。" % ("开启" if enabled else "关闭"))
 	else:
+		if _reconciling:
+			enabled = false
 		event_logged.emit("系统代理设置%s。" % ("超时，操作已终止" if timed_out else "失败，请检查 Windows 权限"))
 	status_changed.emit(enabled)
 	busy_changed.emit(false)

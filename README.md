@@ -108,6 +108,23 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 
 > 内置终端会执行用户主动输入的命令，请只运行自己理解并信任的命令。
 
+### Codex 账号切换
+
+- 新建账号配置后切换，在 Codex 桌面端完成官方登录；也可导入完整的 `auth.json`。
+- “保存为独立账号”按登录身份匹配已有账号；新身份保存为新账号，不再覆盖默认栏。空账号栏可点击“将当前登录保存到此账号”，把当前登录绑定到指定栏位。
+- 状态刷新不会替换已保存账号身份；切换前若发现外部更换了登录，会先独立保存新账号，保护旧备份。
+- 切换先关闭 Codex，再保存它最新的登录状态，仅切换 `auth.json` 与 `config.toml`，随后重新启动。聊天历史、SQLite 数据库和插件文件不被复制或覆盖。
+- 每个账号保存自己的配置；导入或新建账号会继承当前配置中的其他设置，并选择 OpenAI provider 和文件凭据存储。
+- 认证、配置或账号索引写入失败，以及桌面启动失败，都会尝试恢复切换前的状态。异常中断后显示“恢复中断切换”入口。
+- 账号卡片直接显示 5 小时、每周剩余额度进度条，以及本地恢复时间和倒计时。保存登录后自动查询一次，仍可点击“查额度”更新。失败时保留上次结果；未知值显示“未知”。API Key 账号不提供 ChatGPT 订阅额度。
+- 登录文件只保存在本机。额度查询仅请求 OpenAI 官方地址，令牌不进入界面、账号索引或错误输出。令牌过期后需在 Codex 中重新登录或导入新文件，不主动轮换 refresh token。
+- 支持 `CODEX_HOME`，兼容旧版独立账号目录；迁移只复制认证与配置，保留原始目录。移除账号只删除列表入口。
+- 当前切换使用文件凭据。若当前登录使用 `keyring` / `auto` 或 `auth.json` 不完整，会在修改前提示先设置 `cli_auth_credentials_store = "file"` 并重新登录，确保原账号能够恢复。
+
+账号索引位于 Godot 用户数据目录的 `codex_profiles.json`，备份默认位于 `%USERPROFILE%\.codex-profiles\HexagonProxy\accounts`。切换会中断 Codex 中正在运行的本地任务，界面会在执行前提示。
+
+功能设计参考 [codex-tools](https://github.com/170-carry/codex-tools)，以本项目的 Godot / PowerShell 架构实现。认证格式及文件存储规则参见 [OpenAI 官方认证说明](https://learn.chatgpt.com/docs/auth)。额度服务接口可能发生变化；查询失败会显示原因，不会更改当前登录或伪造额度。
+
 ### Windows 集成
 
 - 系统托盘驻留与窗口恢复。
@@ -179,7 +196,7 @@ dist/HexagonProxy.exe
 dist/SHA256SUMS.txt
 ```
 
-默认构建不会把 Mihomo 打入 EXE。`-WithInstaller` 可进入可选的 IExpress 安装包路径，但当前官方发布以便携版为主。
+构建统一输出 `dist/HexagonProxy.exe` 和 `SHA256SUMS.txt`，不再生成带版本后缀的 EXE 或安装包。测试和导出成功后覆盖旧包，并清理 build/dist 内历史 HexagonProxy 应用包；若旧程序正在运行导致文件占用，请退出后重新构建。Mihomo 内核不打入 EXE。
 
 开发环境运行数据位于 Godot 用户目录下的 `user://runtime`、`user://profiles` 等位置，不写入源码目录。
 

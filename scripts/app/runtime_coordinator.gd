@@ -15,6 +15,11 @@ var app_shell
 
 var _enable_proxy_when_online := false
 var _active := false
+var _health
+var _health_timer: Timer
+var _health_message := "代理入口尚未验证"
+var _health_state := "checking"
+var _last_health_check := -20000
 
 func setup(proxy, control, system_proxy, subscription, dashboard, settings, resident_controller, shell) -> void:
 	proxy_service = proxy
@@ -39,15 +44,54 @@ func start() -> void:
 	if _active:
 		return
 	_active = true
+	_health = preload("res://scripts/modules/network/proxy_health_service.gd").new()
+	add_child(_health)
+	_health.checked.connect(_on_health_checked)
+	_health_timer = Timer.new()
+	_health_timer.wait_time = 20
+	_health_timer.timeout.connect(_check_health)
+	add_child(_health_timer)
+	_health_timer.start()
 	_on_status_changed(false, "代理未连接")
 
 func shutdown() -> void:
 	_active = false
+	if is_instance_valid(_health_timer):
+		_health_timer.stop()
+	if is_instance_valid(_health):
+		_health.cancel()
+		_last_health_check = -20000
+
+func _check_health() -> void:
+	if not _active or not mihomo_control.online:
+		return
+	if Time.get_ticks_msec() - _last_health_check < 20000:
+		return
+	_last_health_check = Time.get_ticks_msec()
+	_health.probe(proxy_service.config.controller_host(), proxy_service.config.mixed_port())
+	if _enable_proxy_when_online and not system_proxy_service.busy:
+		system_proxy_service.reconcile()
+
+func _on_health_checked(state: String, message: String) -> void:
+	if not _active or not mihomo_control.online:
+		return
+	if state != _health_state:
+		mihomo_control.event_logged.emit(message)
+	_health_state = state
+	_health_message = message
+	_on_status_changed(true, message)
 
 func _on_mihomo_state_changed(value_online: bool, _value_starting: bool, _value_pid: int, message: String) -> void:
 	if not _active:
 		return
 	_on_status_changed(value_online, message)
+	if value_online:
+		_check_health()
+	else:
+		_health.cancel()
+		_last_health_check = -20000
+		_health_state = "checking"
+		_health_message = "代理入口尚未验证"
 
 func _on_connect_toggled(enabled: bool) -> void:
 	if not _active:
@@ -65,7 +109,13 @@ func _on_connect_toggled(enabled: bool) -> void:
 		mihomo_control.stop()
 
 func _on_status_changed(is_online: bool, message: String) -> void:
+	if is_online:
+		message = _health_message
+		if not system_proxy_service.is_enabled():
+			message += " · 系统代理未开启"
 	dashboard_panel.set_status(is_online, bool(mihomo_control.starting), message)
+	if is_online:
+		dashboard_panel.set_network_health(_health_state == "healthy" and system_proxy_service.is_enabled(), message)
 	if is_online and _enable_proxy_when_online and not system_proxy_service.is_enabled():
 		system_proxy_service.set_enabled(true)
 	if resident:
@@ -85,6 +135,10 @@ func _on_system_proxy_intent_changed(enabled: bool) -> void:
 func _on_system_proxy_status_changed(enabled: bool) -> void:
 	if _active:
 		settings_panel.set_system_proxy_state(enabled)
+		if mihomo_control.online:
+			var message := _health_message + ("" if enabled else " · 系统代理未开启")
+			dashboard_panel.set_status(true, false, message)
+			dashboard_panel.set_network_health(_health_state == "healthy" and enabled, message)
 
 func _on_system_proxy_busy_changed(busy: bool) -> void:
 	if _active:

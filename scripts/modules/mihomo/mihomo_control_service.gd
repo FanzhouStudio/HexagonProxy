@@ -147,7 +147,7 @@ func _on_api_result(action: String, ok: bool, payload: Variant) -> void:
 		if ok:
 			_startup_attempts = 0
 			_health_failures = 0
-			_set_online(true, "守护中 · 连接安全")
+			_set_online(true, "内核已连接 · 等待代理入口验证")
 		elif starting:
 			_startup_attempts += 1
 			if _startup_attempts >= STARTUP_MAX_ATTEMPTS:
@@ -161,6 +161,9 @@ func _on_api_result(action: String, ok: bool, payload: Variant) -> void:
 			_health_failures += 1
 			if _health_failures >= 3:
 				event_logged.emit("Mihomo 控制接口连续三次无响应。")
+				_set_online(false, "控制接口失联，正在重新检测")
+		else:
+			_emit_state("控制接口尚未恢复")
 	if action == "set_mode" and ok:
 		event_logged.emit("代理模式已切换。")
 	if action == "resolve_global_proxy":

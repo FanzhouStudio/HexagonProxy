@@ -199,6 +199,13 @@ func set_connect_pressed(value: bool) -> void:
 	if is_instance_valid(connect_toggle):
 		connect_toggle.set_pressed_no_signal(value)
 
+func set_network_health(healthy: bool, message: String) -> void:
+	if not is_instance_valid(status_label):
+		return
+	status_label.add_theme_color_override("font_color", ui.green_color if healthy else ui.danger_color)
+	status_dot.add_theme_color_override("font_color", ui.green_color if healthy else ui.danger_color)
+	pet_speech.text = "代理入口已验证" if healthy else message
+
 func set_mode(mode: String) -> void:
 	if mode_buttons.has(mode):
 		mode_buttons[mode].set_pressed_no_signal(true)

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('enable', 'disable')]
+    [ValidateSet('enable', 'disable', 'ensure')]
     [string]$Action,
     [Parameter(Mandatory = $true)]
     [string]$StatePath,
@@ -30,17 +30,18 @@ function Merge-ProxyOverride([string]$Required, [string]$Existing) {
     return ($items -join ';')
 }
 
-if ($Action -eq 'enable') {
+if ($Action -in @('enable', 'ensure')) {
     $enable = Get-OptionalRegistryValue 'ProxyEnable'
     $server = Get-OptionalRegistryValue 'ProxyServer'
     $override = Get-OptionalRegistryValue 'ProxyOverride'
-    @{
+    if ($Action -eq 'ensure' -and $enable.Exists -and [int]$enable.Value -eq 1 -and [string]$server.Value -eq $ProxyServer) { exit 0 }
+    if (-not (Test-Path -LiteralPath $StatePath)) { @{
         ProxyEnable = if ($enable.Exists) { [int]$enable.Value } else { 0 }
         ProxyServerExists = [bool]$server.Exists
         ProxyServer = [string]$server.Value
         ProxyOverrideExists = [bool]$override.Exists
         ProxyOverride = [string]$override.Value
-    } | ConvertTo-Json -Compress | Set-Content -LiteralPath $StatePath -Encoding UTF8
+    } | ConvertTo-Json -Compress | Set-Content -LiteralPath $StatePath -Encoding UTF8 }
     $existingOverride = if ($override.Exists) { [string]$override.Value } else { '' }
     $effectiveOverride = Merge-ProxyOverride $ProxyOverride $existingOverride
     Set-ItemProperty -LiteralPath $registryPath -Name 'ProxyServer' -Type String -Value $ProxyServer
