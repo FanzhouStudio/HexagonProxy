@@ -151,6 +151,19 @@ Assert ((Convert-Usage $payload).five_hour -eq -1) 'malformed percent unknown'
 $payload.rate_limit.secondary_window.used_percent = 'NaN'
 Assert ((Convert-Usage $payload).five_hour -eq -1) 'NaN unknown'
 
+$proPayload = @{ plan_type = 'prolite'; rate_limit = @{
+    primary_window = @{ used_percent = 2; limit_window_seconds = 604800; reset_at = 1900000000 }
+    secondary_window = $null
+}; additional_rate_limits = @(@{ limit_name = 'GPT-5.3-Codex-Spark'; rate_limit = @{
+    primary_window = @{ used_percent = 0; limit_window_seconds = 18000; reset_at = 1800000000 }
+    secondary_window = @{ used_percent = 1; limit_window_seconds = 604800; reset_at = 1900000000 }
+} }) }
+$proUsage = Convert-Usage $proPayload
+Assert ($proUsage.groups.Count -eq 2) 'Pro main and Spark quotas kept separate'
+Assert ($proUsage.groups[0].windows.Count -eq 1 -and $proUsage.groups[0].windows[0].remaining -eq 98) 'Pro weekly-only response has no invented five-hour window'
+Assert ($proUsage.groups[1].windows.Count -eq 2 -and $proUsage.groups[1].windows[0].remaining -eq 100) 'Spark independent windows retain their readings'
+Assert ($proUsage.five_hour -eq -1 -and $proUsage.weekly -eq 98) 'Spark never replaces main quota'
+
 # Exercise the real entry point with fake auth and temporary storage.
 $importRoot = Join-Path $testRoot 'import'
 $fakePath = Join-Path $importRoot 'input.json'

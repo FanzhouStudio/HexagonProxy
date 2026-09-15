@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('inspect', 'switch', 'launch', 'capture', 'import', 'prepare', 'usage', 'recover', 'login')]
     [string]$Action = 'inspect',
     [string]$CodexHome = '',
@@ -489,6 +489,33 @@ function Start-Codex {
 
 function Convert-Usage($Payload) {
     $usage = @{ five_hour = -1; weekly = -1; five_hour_reset = 0; weekly_reset = 0; plan = [string]$Payload.plan_type; updated_at = [DateTime]::UtcNow.ToString('o') }
+    $groups = @(@{ name = 'main'; rate_limit = $Payload.rate_limit })
+    foreach ($extra in @($Payload.additional_rate_limits)) {
+        if ($null -ne $extra.rate_limit) {
+            $name = [string]$extra.limit_name
+            if (-not $name) { $name = [string]$extra.metered_feature }
+            if (-not $name) { $name = 'additional' }
+            $groups += @{ name = $name; rate_limit = $extra.rate_limit }
+        }
+    }
+    $usage['groups'] = @()
+    foreach ($group in $groups) {
+        $windows = @()
+        foreach ($window in @($group.rate_limit.primary_window, $group.rate_limit.secondary_window)) {
+            if ($null -eq $window) { continue }
+            $seconds = 0L
+            if (-not [long]::TryParse([string]$window.limit_window_seconds, [ref]$seconds) -or $seconds -le 0) { continue }
+            $percent = 0.0
+            $remaining = -1
+            if ([double]::TryParse([string]$window.used_percent, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$percent) -and -not [double]::IsNaN($percent) -and -not [double]::IsInfinity($percent)) {
+                $remaining = [Math]::Max(0, [Math]::Min(100, 100 - $percent))
+            }
+            $reset = 0L
+            [void][long]::TryParse([string]$window.reset_at, [ref]$reset)
+            $windows += @{ seconds = $seconds; remaining = $remaining; reset_at = $reset }
+        }
+        $usage.groups += @{ name = $group.name; windows = @($windows | Sort-Object { $_.seconds }) }
+    }
     foreach ($window in @($Payload.rate_limit.primary_window, $Payload.rate_limit.secondary_window)) {
         if ($null -eq $window -or $null -eq $window.used_percent) { continue }
         $percent = 0.0

@@ -242,7 +242,8 @@ func _profile_row(profile: Dictionary) -> Control:
 	var login_text := "已保存登录" if logged_in else "待登录"
 	var state_text := "%s · %s" % [login_text, "当前账号" if selected else "账号备份"]
 	var email := str(profile.get("email", ""))
-	var plan := str(profile.get("plan", ""))
+	var usage: Dictionary = profile.get("usage", {})
+	var plan := str(usage.get("plan", profile.get("plan", "")))
 	if not email.is_empty():
 		state_text += " · " + email
 	if not plan.is_empty():
@@ -250,12 +251,32 @@ func _profile_row(profile: Dictionary) -> Control:
 	var account_label := ui.label(state_text, 10, GREEN if logged_in else YELLOW)
 	account_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	words.add_child(account_label)
-	var usage: Dictionary = profile.get("usage", {})
-	var meters := HBoxContainer.new()
-	meters.add_theme_constant_override("separation", 24)
-	words.add_child(meters)
-	meters.add_child(_quota_meter("5 小时", usage.get("five_hour", -1), int(usage.get("five_hour_reset", 0))))
-	meters.add_child(_quota_meter("每周", usage.get("weekly", -1), int(usage.get("weekly_reset", 0))))
+	if usage.get("groups") is Array:
+		for group in usage["groups"]:
+			if not group is Dictionary:
+				continue
+			var group_name := str(group.get("name", "额度"))
+			if group_name == "main":
+				group_name = "主额度"
+			elif group_name == "additional":
+				group_name = "独立额度"
+			words.add_child(ui.label(group_name, 11, MUTED))
+			var windows: Array = group.get("windows", [])
+			if windows.is_empty():
+				words.add_child(ui.label("接口未提供额度窗口", 11, MUTED))
+			var meters := HBoxContainer.new()
+			meters.add_theme_constant_override("separation", 24)
+			words.add_child(meters)
+			for window in windows:
+				if window is Dictionary:
+					meters.add_child(_quota_meter(_window_title(int(window.get("seconds", 0))), window.get("remaining", -1), int(window.get("reset_at", 0))))
+	else:
+		# Existing cached readings remain usable until the next successful refresh.
+		var meters := HBoxContainer.new()
+		meters.add_theme_constant_override("separation", 24)
+		words.add_child(meters)
+		meters.add_child(_quota_meter("5 小时", usage.get("five_hour", -1), int(usage.get("five_hour_reset", 0))))
+		meters.add_child(_quota_meter("每周", usage.get("weekly", -1), int(usage.get("weekly_reset", 0))))
 	if not str(usage.get("updated_at", "")).is_empty():
 		words.add_child(ui.label("更新于 " + str(usage["updated_at"]).replace("T", " ").replace("Z", " UTC"), 10, MUTED))
 	var usage_error := str(profile.get("usage_error", ""))
@@ -372,6 +393,15 @@ func _choose_import_file() -> void:
 				import_requested.emit(path, profile_name_edit.text.strip_edges())
 		)
 	_file_dialog.popup_centered_ratio(0.65)
+
+func _window_title(seconds: int) -> String:
+	if seconds == 604800:
+		return "每周"
+	if seconds % 86400 == 0:
+		return "%d 天" % (seconds / 86400)
+	if seconds % 3600 == 0:
+		return "%d 小时" % (seconds / 3600)
+	return "%d 分钟" % int(ceil(seconds / 60.0))
 
 func _format_remaining(value: Variant) -> String:
 	if not (value is int or value is float) or float(value) < 0:

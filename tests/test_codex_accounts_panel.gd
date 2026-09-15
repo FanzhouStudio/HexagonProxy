@@ -83,7 +83,21 @@ func _run() -> void:
 		if button.size.y > 60:
 			_fail("实际布局中按钮高度超出 60 像素", 14)
 			return
-	print("PASS: CodexAccountsPanel 状态、忙碌、导入、恢复与额度渲染")
+	profiles[0]["usage"] = {"plan": "prolite", "groups": [
+		{"name": "主额度", "windows": [{"seconds": 604800, "remaining": 98, "reset_at": 1900000000}]},
+		{"name": "GPT-5.3-Codex-Spark", "windows": [{"seconds": 18000, "remaining": 100}, {"seconds": 604800, "remaining": 99}]}
+	]}
+	panel.render({"installed": true, "selected_id": "default"}, profiles)
+	var labels: Array = panel.profile_list.find_children("*", "Label", true, false).map(func(label: Label) -> String: return label.text)
+	if panel.profile_list.find_children("*", "ProgressBar", true, false).size() != 3 or not labels.has("GPT-5.3-Codex-Spark") or labels.has("5 小时剩余 未知"):
+		_fail("Pro 动态窗口或独立 Spark 额度渲染错误", 17)
+		return
+	profiles[0]["usage"] = {"groups": [{"name": "主额度", "windows": [{"seconds": 18000, "remaining": 50}, {"seconds": 604800, "remaining": 60}]}]}
+	panel.render({"installed": true}, profiles)
+	if panel.profile_list.find_children("*", "ProgressBar", true, false).size() != 2:
+		_fail("Plus 双窗口未保留", 18)
+		return
+	print("PASS: CodexAccountsPanel 状态、忙碌、导入、恢复与动态额度渲染")
 	quit(0)
 
 func _fail(message: String, code: int) -> void:
