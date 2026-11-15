@@ -10,6 +10,12 @@ class FakeWindowController:
 	extends Node
 	signal exit_shortcut_requested
 	var minimizes := 0
+	var drags := 0
+	var maximizes := 0
+	func drag_window() -> void:
+		drags += 1
+	func toggle_maximized() -> void:
+		maximizes += 1
 	func minimize_window() -> void:
 		minimizes += 1
 
@@ -44,11 +50,17 @@ func _run() -> void:
 	shell.window_action_requested.emit("close")
 	shell.window_action_requested.emit("exit")
 	window_controller.exit_shortcut_requested.emit()
+	shell.window_action_requested.emit("drag")
+	shell.window_action_requested.emit("maximize")
+	assert(window_controller.drags == 1 and window_controller.maximizes == 1)
 	if window_controller.minimizes != 1 or resident.closes != 1 or resident.exits != 1 or resident.toggles != 1:
 		_fail("窗口 action 或 ESC 路由不正确", 2)
 		return
 
 	coordinator.shutdown()
+	shell.window_action_requested.emit("drag")
+	shell.window_action_requested.emit("maximize")
+	assert(window_controller.drags == 1 and window_controller.maximizes == 1)
 	shell.window_action_requested.emit("exit")
 	window_controller.exit_shortcut_requested.emit()
 	if resident.exits != 1 or resident.toggles != 1:

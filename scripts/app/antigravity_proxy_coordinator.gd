@@ -20,6 +20,14 @@ func setup(proxy_service, proxy_panel: AntigravityProxyPanel, mihomo_control) ->
 	panel.account_add_requested.connect(_add_account)
 	panel.account_action_requested.connect(_account_action)
 	panel.account_remove_requested.connect(_remove_account)
+	panel.account_default_requested.connect(_set_default_account)
+
+func _set_default_account(id: String) -> void:
+	if not _active or _working:
+		return
+	var result: Dictionary = service.accounts.set_default_account(id)
+	panel.render(service.view_state())
+	panel.show_account_message(str(result.get("message", "")), result.get("ok", false))
 
 func _remove_account(id: String) -> void:
 	if not _active or _working:
@@ -59,10 +67,12 @@ func _account_action(action: String, id: String, quiet := false) -> void:
 		if action == "quota":
 			if not quiet or result.get("ok", false):
 				panel.show_quota(result, id)
+				if not quiet:
+					panel.call_deferred("reveal_quota")
 			if result.get("logged_in", false) and id == _pending_login_id:
 				_login_timer.stop()
 		else:
-			panel.quota_view.text = "额度未知，请登录此配置后刷新。"
+			panel.show_quota({"ok": false, "message": "请等待此账号启动并登录后刷新。"}, id)
 			if result.get("ok", false):
 				_pending_login_id = id
 				_login_checks = 0
@@ -119,10 +129,13 @@ func _on_action_requested(action: String) -> void:
 	_working = true
 	panel.set_busy(true)
 	panel.show_message("正在处理 Antigravity 代理…", true)
-	var result: Dictionary = await service.perform(action)
+	# Synchronize proxy files first, then open the preferred account's window.
+	var result: Dictionary = await service.perform("enable" if action == "launch" else action)
 	var state: Dictionary = await service.refresh_status()
 	if _active:
 		panel.render(state)
 		panel.set_busy(false)
 		panel.show_message(str(result.get("message", "")), bool(result.get("ok", false)))
 	_working = false
+	if _active and action == "launch" and result.get("ok", false):
+		await _account_action("launch", service.accounts.default_account)

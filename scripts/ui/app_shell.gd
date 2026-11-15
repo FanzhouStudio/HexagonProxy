@@ -130,6 +130,7 @@ func build(profile_name: String) -> void:
 func show_page(page_id: String) -> void:
 	if _current_page == page_id:
 		return
+	var previous_page := _current_page
 	_current_page = page_id
 	var titles := {
 		"dashboard": "网络总览",
@@ -141,15 +142,23 @@ func show_page(page_id: String) -> void:
 		"antigravity": "Antigravity",
 		"settings": "偏好设置"
 	}
-	for page_name in pages:
-		pages[page_name].visible = page_name == page_id
+	if previous_page.is_empty():
+		for page_name in pages:
+			pages[page_name].visible = page_name == page_id
+	else:
+		pages[previous_page].hide()
+		pages[page_id].show()
 	if is_instance_valid(dashboard_panel):
 		dashboard_panel.set_dashboard_active(page_id == 'dashboard')
 	for nav_name in nav_buttons:
+		if not previous_page.is_empty() and str(nav_name) not in [previous_page, page_id]:
+			continue
 		var active: bool = str(nav_name) == page_id
 		var button: Button = nav_buttons[nav_name]
 		ui.apply_nav_button(button, active)
 	for page_name in rail_buttons:
+		if not previous_page.is_empty() and str(page_name) not in [previous_page, page_id]:
+			continue
 		ui.apply_rail_button(rail_buttons[page_name], str(page_name) == page_id)
 	if is_instance_valid(page_title):
 		page_title.text = titles.get(page_id, "HexagonProxy")
@@ -176,6 +185,9 @@ func _build_topbar(parent: Container) -> void:
 	parent.add_child(top)
 	page_title = ui.label("网络总览", 20, OVERLAY_TEXT)
 	page_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page_title.mouse_filter = Control.MOUSE_FILTER_STOP
+	page_title.tooltip_text = "拖动顶栏移动窗口，双击最大化或还原"
+	page_title.gui_input.connect(_on_title_input)
 	top.add_child(page_title)
 	var status_pill := ui.panel(Color("f7ffffdf"), Color("a8e8e8e8"), 16)
 	status_pill.custom_minimum_size = Vector2(190, 40)
@@ -206,11 +218,19 @@ func _build_window_actions(parent: HBoxContainer) -> void:
 		var action_id := str(action.get("id", ""))
 		var action_color := ui.danger_color if bool(action.get("danger", false)) else Color.TRANSPARENT
 		var button := ui.small_choice_button(str(action.get("text", action_id)), action_color)
+		button.set_meta("ui_window_action", true)
+		ui.apply_window_action_theme(button)
 		button.custom_minimum_size = Vector2(float(action.get("width", 72)), 34)
-		button.tooltip_text = str(action.get("tooltip", ""))
+		# These actions already have visible text. A native tooltip over the
+		# fullscreen window can recreate the Windows surface and drop hover.
+		button.tooltip_text = ""
 		button.pressed.connect(_on_window_action.bind(action_id))
 		parent.add_child(button)
 		window_action_buttons[action_id] = button
+
+func _on_title_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		window_action_requested.emit("maximize" if event.double_click else "drag")
 
 func _on_window_action(action_id: String) -> void:
 	window_action_requested.emit(action_id)

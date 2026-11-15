@@ -7,6 +7,7 @@ signal refresh_requested
 signal account_add_requested(account_name: String)
 signal account_action_requested(action: String, id: String)
 signal account_remove_requested(id: String)
+signal account_default_requested(id: String)
 
 const ConfirmationPromptScript = preload("res://scripts/ui/confirmation_prompt.gd")
 
@@ -27,11 +28,19 @@ var account_name: LineEdit
 var account_add: Button
 var quota_view: Label
 var quota_heading: Label
+var quota_rows: VBoxContainer
+var quota_bars: Array[ProgressBar] = []
 var account_message: Label
 var account_list: VBoxContainer
 var account_buttons: Array[Button] = []
 var _selected_account := "default"
 var _prompt_host: Control
+var _page_scroll: ScrollContainer
+var _account_snapshot: Dictionary = {}
+var _quota_snapshot: Dictionary = {}
+var _quota_account := ""
+var _quota_cached := false
+var _quota_row_views: Array = []
 
 func setup(factory: UiFactory, prompt_host: Control = null) -> void:
 	ui = factory
@@ -109,6 +118,7 @@ func build() -> Control:
 	accounts_margin.add_child(accounts_column)
 	_build_accounts(accounts_column)
 	var scroll := ScrollContainer.new()
+	_page_scroll = scroll
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(page)
@@ -148,6 +158,15 @@ func _build_accounts(column: VBoxContainer) -> void:
 	quota_view = ui.label("额度未知。打开并登录所选配置后可刷新；未运行或接口不兼容时会显示原因。", 12, ui.muted_color)
 	quota_view.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(quota_view)
+	var quota_scroll := ScrollContainer.new()
+	quota_scroll.custom_minimum_size.y = 320
+	quota_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(quota_scroll)
+	quota_rows = VBoxContainer.new()
+	quota_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quota_rows.add_theme_constant_override("separation", 10)
+	quota_scroll.add_child(quota_rows)
+	ui.theme_applied.connect(_refresh_quota_styles)
 
 func selected_account() -> String:
 	return _selected_account
@@ -162,6 +181,7 @@ func _build_account_rows(state: Dictionary) -> void:
 		child.queue_free()
 	account_buttons.clear()
 	_selected_account = str(state.get("selected_account", "default"))
+	var default_id := str(state.get("default_account", "default"))
 	for item in state.get("accounts", []):
 		var id := str(item.get("id", ""))
 		var card := ui.panel(ui.surface_2_color, ui.border_color, 7)
@@ -169,7 +189,7 @@ func _build_account_rows(state: Dictionary) -> void:
 		var row := VBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
 		card.add_child(row)
-		var title := ui.label(str(item.get("name", "账号")), 14, ui.text_color)
+		var title := ui.label(str(item.get("name", "账号")) + (" · 默认" if id == default_id else ""), 14, ui.text_color)
 		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		row.add_child(title)
 		var status := str(item.get("email", ""))
@@ -178,9 +198,14 @@ func _build_account_rows(state: Dictionary) -> void:
 		elif not item.get("logged_in", false):
 			status += " · 上次识别的账号"
 		if item.get("logged_in", false):
-			status += " · 已识别登录"
+			status += " · 曾识别登录（历史记录）"
 		if id == _selected_account:
 			status += " · 最近打开"
+		var session: Dictionary = state.get("account_sessions", {}).get(id, {})
+		if session.has("editor_running"):
+			status += " · 窗口运行中" if session.editor_running else " · 窗口未运行"
+		elif session.get("discovery", "") == "process_access_denied":
+			status += " · 权限不足，运行状态未知"
 		var detail := ui.label(status, 11, ui.muted_color)
 		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(detail)
@@ -198,7 +223,13 @@ func _build_account_rows(state: Dictionary) -> void:
 		refresh.pressed.connect(func() -> void: account_action_requested.emit("quota", id))
 		actions.add_child(refresh)
 		account_buttons.append(refresh)
-		if id != "default":
+		if id != default_id:
+			var default_button := ui.small_choice_button("设为默认")
+			default_button.set_meta("account_id", id)
+			default_button.set_meta("account_action", "set_default")
+			default_button.pressed.connect(func() -> void: account_default_requested.emit(id))
+			actions.add_child(default_button)
+			account_buttons.append(default_button)
 			var remove_button := ui.small_choice_button("删除", ui.danger_color)
 			remove_button.tooltip_text = "删除账号入口，保留本地登录备份、项目和对话"
 			remove_button.set_meta("account_id", id)
@@ -208,15 +239,16 @@ func _build_account_rows(state: Dictionary) -> void:
 			account_buttons.append(remove_button)
 		var snapshot: Dictionary = state.get("quota_snapshots", {}).get(id, {})
 		if not snapshot.is_empty():
-			var summaries := PackedStringArray()
-			for model in snapshot.get("models", []):
-				summaries.append("%s · 剩余 %s%%" % [model.get("name", "模型"), model.get("remaining", "未知")])
-			var quota := ui.label("上次查询：" + " / ".join(summaries), 11, ui.muted_color)
-			quota.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			row.add_child(quota)
+			var view_button := ui.small_choice_button("查看额度 · %d 个模型" % snapshot.get("models", []).size())
+			view_button.pressed.connect(func() -> void:
+				show_quota(_state.get("quota_snapshots", {}).get(id, {}), id, true)
+				call_deferred("reveal_quota")
+			)
+			actions.add_child(view_button)
+			account_buttons.append(view_button)
 
 func _request_remove(id: String, account_title: String) -> void:
-	if _busy or id == "default" or not is_instance_valid(_prompt_host):
+	if _busy or id == str(_state.get("default_account", "default")) or not is_instance_valid(_prompt_host):
 		return
 	var existing := _prompt_host.get_node_or_null("AntigravityDeletePrompt")
 	if is_instance_valid(existing):
@@ -232,30 +264,100 @@ func _request_remove(id: String, account_title: String) -> void:
 			account_remove_requested.emit(id)
 	)
 
-func _show_cached_quota() -> void:
-	quota_heading.text = "额度详情"
-	var snapshot: Dictionary = _state.get("quota_snapshots", {}).get(selected_account(), {})
+func _show_cached_quota(id := "") -> void:
+	if id.is_empty():
+		id = selected_account()
+	var snapshot: Dictionary = _state.get("quota_snapshots", {}).get(id, {})
 	if snapshot.is_empty():
+		_clear_quota_rows()
+		_quota_snapshot = {}
+		_quota_account = id
+		quota_heading.text = "额度详情"
 		quota_view.text = "额度未知，打开并登录此配置后点击刷新。"
 	else:
-		show_quota(snapshot, selected_account())
-		quota_view.text = "上次查询缓存（可能已变化）\n" + quota_view.text
+		show_quota(snapshot, id, true)
 
-func show_quota(result: Dictionary, id := "") -> void:
+func show_quota(result: Dictionary, id := "", cached := false) -> void:
+	if _quota_snapshot == result and _quota_account == id and _quota_cached == cached:
+		return
+	var models: Array = result.get("models", [])
+	var names := models.map(func(model: Dictionary) -> String: return str(model.get("name", "模型")))
+	var old_names := _quota_row_views.map(func(view: Dictionary) -> String: return str(view.name.text))
+	var rebuild := id != _quota_account or names != old_names
+	_quota_snapshot = result.duplicate(true)
+	_quota_account = id
+	_quota_cached = cached
 	for account in _state.get("accounts", []):
 		if str(account.get("id", "")) == id:
 			quota_heading.text = str(account.get("name", "账号")) + " · 额度详情"
 			break
 	if not result.get("ok", false):
+		_clear_quota_rows()
 		quota_view.text = "额度未知：" + str(result.get("message", "读取失败"))
 		return
 	var lines := PackedStringArray()
+	if cached:
+		lines.append("上次查询缓存（可能已变化）")
 	if not str(result.get("email", "")).is_empty():
 		lines.append(str(result.email))
-	for model in result.get("models", []):
-		lines.append("%s：剩余 %s%% · 重置 %s" % [model.get("name", "模型"), model.get("remaining", "未知"), model.get("reset", "未知")])
+	if rebuild:
+		_clear_quota_rows()
+	for index in models.size():
+		var model: Dictionary = models[index]
+		if rebuild:
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 12)
+			quota_rows.add_child(row)
+			var model_name := ui.label(str(model.get("name", "模型")), 12, ui.text_color)
+			model_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			model_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			row.add_child(model_name)
+			var progress := ProgressBar.new()
+			progress.custom_minimum_size = Vector2(110, 12)
+			progress.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			progress.show_percentage = false
+			row.add_child(progress)
+			quota_bars.append(progress)
+			var percentage := ui.label("", 12, ui.text_color)
+			percentage.custom_minimum_size.x = 170
+			percentage.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			row.add_child(percentage)
+			_quota_row_views.append({"name": model_name, "bar": progress, "remaining": percentage})
+		var raw: Variant = model.get("remaining")
+		var known := (raw is int or raw is float) and is_finite(float(raw)) and float(raw) >= 0 and float(raw) <= 100
+		var bar: ProgressBar = _quota_row_views[index].bar
+		bar.value = float(raw) if known else 0.0
+		bar.visible = known
+		bar.tooltip_text = "重置时间：%s" % str(model.get("reset", "未知"))
+		var remaining: Label = _quota_row_views[index].remaining
+		remaining.text = "剩余 %s%%" % str(raw) if known else "额度未知"
+		remaining.tooltip_text = bar.tooltip_text
 	lines.append("查询时间（UTC）：%s" % result.get("checked_at", "未知"))
 	quota_view.text = "\n".join(lines)
+	_refresh_quota_styles()
+
+func _clear_quota_rows() -> void:
+	if not is_instance_valid(quota_rows):
+		return
+	for child in quota_rows.get_children():
+		quota_rows.remove_child(child)
+		child.queue_free()
+	quota_bars.clear()
+	_quota_row_views.clear()
+
+func reveal_quota() -> void:
+	_page_scroll.ensure_control_visible(quota_rows.get_parent())
+
+func _refresh_quota_styles() -> void:
+	for bar in quota_bars:
+		if is_instance_valid(bar):
+			var accent := ui.danger_color if bar.value <= 10 else ui.warning_color if bar.value <= 30 else ui.green_color
+			var signature := "%s/%s/%s" % [ui.surface_2_color.to_html(), ui.border_color.to_html(), accent.to_html()]
+			if bar.get_meta("quota_style", "") == signature:
+				continue
+			bar.set_meta("quota_style", signature)
+			bar.add_theme_stylebox_override("background", ui.style(ui.surface_2_color, ui.border_color, 5, 1))
+			bar.add_theme_stylebox_override("fill", ui.style(accent, Color.TRANSPARENT, 5, 0))
 
 func _action_button(text: String, action: String, parent: Container) -> Button:
 	var button := ui.small_choice_button(text)
@@ -269,8 +371,18 @@ func render(state: Dictionary) -> void:
 		return
 	path_edit.text = str(state.get("exe_path", ""))
 	path_edit.tooltip_text = path_edit.text
-	_build_account_rows(state)
-	_show_cached_quota()
+	var quota_counts: Dictionary = {}
+	for id in state.get("quota_snapshots", {}):
+		quota_counts[id] = state.quota_snapshots[id].get("models", []).size()
+	var accounts_state := {"accounts": state.get("accounts", []), "selected_account": state.get("selected_account", "default"), "default_account": state.get("default_account", "default"), "quota_counts": quota_counts, "account_sessions": state.get("account_sessions", {})}
+	var selection_changed: bool = accounts_state.selected_account != _account_snapshot.get("selected_account", "")
+	if accounts_state != _account_snapshot:
+		_account_snapshot = accounts_state.duplicate(true)
+		_build_account_rows(state)
+	var display_id := selected_account() if selection_changed else _quota_account
+	if not state.get("accounts", []).any(func(item: Dictionary) -> bool: return str(item.get("id", "")) == display_id):
+		display_id = selected_account()
+	_show_cached_quota(display_id)
 	var installed := bool(state.get("installed", false))
 	var running := bool(state.get("running", false))
 	status_label.text = "独立代理已启用" if installed else "独立代理未启用"

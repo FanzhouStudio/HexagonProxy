@@ -183,6 +183,8 @@ func quit() -> void:
 	quit_requested.emit()
 
 func _exit_tree() -> void:
+	if window_visibility:
+		window_visibility.shutdown()
 	_save_settings()
 
 func _show_close_prompt() -> void:

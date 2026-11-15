@@ -17,6 +17,11 @@ func _run() -> void:
 	var dynamic_panel := ui.panel(ui.surface_color, ui.border_color, 16)
 	var button := ui.small_choice_button("操作")
 	var primary := ui.small_choice_button("添加账号")
+	var nav := ui.small_choice_button("导航")
+	ui.apply_nav_button(nav, false)
+	var nav_style := nav.get_theme_stylebox("normal")
+	ui.apply_nav_button(nav, false)
+	assert(nav.get_theme_stylebox("normal") == nav_style, "Unchanged navigation state must reuse its styles")
 	ui.primary_button(primary)
 	var option := OptionButton.new()
 	ui.apply_crystal_option_theme(option)
@@ -63,7 +68,7 @@ func _run() -> void:
 	root.add_child(second)
 	second.initialize()
 	assert(second.current_theme_id() == "midnight", "Existing theme identifiers remain persistent")
-	for node in [label, panel, dynamic_panel, button, primary, option, input, console, toggle, background]:
+	for node in [label, panel, dynamic_panel, button, primary, nav, option, input, console, toggle, background]:
 		node.free()
 	service.free()
 	second.free()

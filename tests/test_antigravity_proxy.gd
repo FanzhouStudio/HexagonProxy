@@ -85,6 +85,19 @@ func _run() -> void:
 	coordinator.start()
 	await process_frame
 	check(panel.account_list.get_child_count() == 1, "original account has its own clickable row")
+	var original_row_id := panel.account_list.get_child(0).get_instance_id()
+	panel.render(service.view_state())
+	check(panel.account_list.get_child(0).get_instance_id() == original_row_id, "Unchanged account refresh reuses row controls")
+	var display_state: Dictionary = service.view_state()
+	display_state.accounts = [{"id": "default", "name": "默认账号", "logged_in": true, "email": "fixture@example.invalid"}]
+	display_state.account_sessions = {"default": {"editor_running": false}}
+	panel.render(display_state)
+	var labels: Array = panel.account_list.find_children("*", "Label", true, false)
+	check(labels.any(func(label: Label) -> bool: return label.text.contains("历史记录") and label.text.contains("窗口未运行")), "Cached login identity cannot imply a live account window")
+	display_state.account_sessions = {"default": {"discovery": "process_access_denied"}}
+	panel.render(display_state)
+	labels = panel.account_list.find_children("*", "Label", true, false)
+	check(labels.any(func(label: Label) -> bool: return label.text.contains("运行状态未知")), "Unreadable process state stays unknown")
 	await coordinator._add_account("工作号")
 	check(panel.account_list.get_child_count() == 2 and panel.selected_account() != "default", "new account is listed and opened immediately")
 	check(service.accounts.requests.size() == 1 and service.accounts.requests[0][0] == "launch", "adding an account must actually open login")
@@ -129,12 +142,48 @@ func _run() -> void:
 	check(coordinator._pending_login_id.is_empty() and coordinator._login_timer.is_stopped(), "Deleted accounts stop automatic login polling")
 	check(panel.quota_heading.text == "额度详情" and panel.quota_view.text.contains("额度未知"), "Deleted account quota details are cleared")
 	panel.show_quota({"ok": true, "models": [{"name": "Fixture", "remaining": 0, "reset": "2030-01-01T00:00:00Z"}], "checked_at": "fixture"})
-	check(panel.quota_view.text.contains("剩余 0%"), "zero quota is displayed as a real exhausted balance")
+	check(panel.quota_rows.get_child_count() == 1 and panel.quota_bars.size() == 1 and panel.quota_bars[0].value == 0 and panel.quota_bars[0].visible, "zero quota has its own row and a real empty progress bar")
+	panel.show_quota({"ok": true, "models": [{"name": "Model A", "remaining": 75}, {"name": "Model B", "remaining": 100}, {"name": "Unknown"}]})
+	check(panel.quota_rows.get_child_count() == 3 and panel.quota_bars[0].value == 75 and panel.quota_bars[1].value == 100 and not panel.quota_bars[2].visible, "Each model has a separate row; unknown balances have no fake zero bar")
+	var bar_id := panel.quota_bars[0].get_instance_id()
+	panel.show_quota({"ok": true, "models": [{"name": "Model A", "remaining": 75}, {"name": "Model B", "remaining": 100}, {"name": "Unknown"}]})
+	check(panel.quota_bars[0].get_instance_id() == bar_id, "Identical quota response preserves progress controls and scrolling")
 	panel.show_quota({"ok": false, "message": "接口未返回额度"})
 	check(panel.quota_view.text.contains("额度未知") and not panel.quota_view.text.contains("剩余 0%"), "unknown quota is never rendered as exhausted")
+	check(panel.quota_rows.get_child_count() == 0, "Failed queries clear stale model bars")
+	var live_state: Dictionary = service.view_state()
+	live_state.quota_snapshots = {"default": {"ok": true, "checked_at": "first", "models": [{"name": "Live model", "remaining": 80}]}}
+	panel.render(live_state)
+	var live_row := panel.account_list.get_child(0).get_instance_id()
+	var live_bar := panel.quota_bars[0].get_instance_id()
+	var live_style := panel.quota_bars[0].get_theme_stylebox("fill")
+	for tick in 30:
+		live_state.quota_snapshots.default.checked_at = str(tick)
+		live_state.quota_snapshots.default.models[0].remaining = 80 - tick
+		panel.render(live_state)
+		check(panel.account_list.get_child(0).get_instance_id() == live_row and panel.quota_bars[0].get_instance_id() == live_bar, "Timestamp and balance updates must not rebuild account cards or model rows")
+		check(panel.quota_bars[0].get_theme_stylebox("fill") == live_style, "Balance updates within one color range cannot invalidate progress styles")
+	check(panel.quota_bars[0].value == 51, "Changed balances still update the existing bar")
+	check(panel.quota_view.text.count("上次查询缓存") == 1, "Repeated refresh cannot accumulate cache captions")
+	await coordinator._add_account("新的默认号")
+	var preferred: String = panel.selected_account()
+	for button in panel.account_buttons:
+		if button.get_meta("account_action", "") == "set_default" and button.get_meta("account_id", "") == preferred:
+			button.pressed.emit()
+			break
+	check(service.accounts.default_account == preferred, "Set-default UI saves the preferred custom account")
+	panel._request_remove("default", "原有账号")
+	prompt = panel._prompt_host.get_node_or_null("AntigravityDeletePrompt")
+	check(is_instance_valid(prompt), "Original entry can be deleted after choosing a new default")
+	prompt.confirmed.emit()
+	prompt.queue_free()
+	await process_frame
+	check(not service.accounts.exists("default") and panel.account_list.get_child_count() == 1, "Deleting the original entry keeps the new default")
 	check(panel.launch_button.disabled and panel.disable_button.disabled and not panel.enable_button.disabled, "uninstalled controls reflect actual state")
 	var previous_count := service.calls.size()
 	await coordinator._on_action_requested("enable")
+	await coordinator._on_action_requested("launch")
+	check(service.accounts.requests[-1] == ["launch", preferred], "Proxy launch uses the preferred account instead of resurrecting the original entry")
 	check(service.calls.size() == previous_count, "offline enable blocked before helper")
 	control.online = true
 	await coordinator._on_action_requested("enable")

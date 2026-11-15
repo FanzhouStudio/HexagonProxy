@@ -13,7 +13,7 @@ config_version=5
 config/name="HexagonProxy"
 config/description="六角恐龙，守护每一次连接"
 run/main_scene="res://main.tscn"
-run/low_processor_mode=true
+run/low_processor_mode=false
 run/low_processor_mode_sleep_usec=10000
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.2863, 0.2745, 0.2471, 1)
@@ -27,12 +27,16 @@ window/size/viewport_height=1080
 window/size/borderless=true
 window/size/window_width_override=1600
 window/size/window_height_override=900
-window/subwindows/embed_subwindows=false
+window/subwindows/embed_subwindows=true
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/per_pixel_transparency/allowed=true
 window/size/min_width=1280
 window/size/min_height=720
+
+[gui]
+
+timers/tooltip_delay_sec=0.2
 
 [rendering]
 

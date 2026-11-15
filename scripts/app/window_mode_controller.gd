@@ -2,7 +2,7 @@ class_name WindowModeController
 extends Node
 
 ## 主窗口显示模式控制器
-## 图形环境默认进入无边框全屏；F11 不再切换窗口模式。
+## 主窗口始终隐藏系统标题栏；可在全屏与自定尺寸之间切换。
 ## ESC 只发出退出提示意图，具体退出流程由 ResidentController 负责。
 
 signal exit_shortcut_requested
@@ -56,19 +56,18 @@ func is_fullscreen() -> bool:
 func minimize_window() -> void:
 	if not is_instance_valid(target_window) or DisplayServer.get_name().to_lower() == "headless":
 		return
-	# 避免无边框全屏窗口直接切换 MINIMIZED 导致 Windows 重建窗口表面产生闪屏。
-	# 先恢复窗口焦点状态，再交给系统最小化。
-	if target_window.mode == Window.MODE_FULLSCREEN:
-		_restore_borderless_after_minimize = _is_borderless()
-		target_window.mode = Window.MODE_WINDOWED
-		await get_tree().process_frame
+	# Keep the existing surface: do not resize to windowed mode before minimizing.
+	_restore_borderless_after_minimize = is_fullscreen()
 	target_window.mode = Window.MODE_MINIMIZED
+	OS.low_processor_usage_mode = true
 
 func _on_window_focus_entered() -> void:
-	if not _restore_borderless_after_minimize:
+	OS.low_processor_usage_mode = false
+	if not _restore_borderless_after_minimize or target_window.mode == Window.MODE_MINIMIZED:
 		return
 	_restore_borderless_after_minimize = false
-	call_deferred("apply_saved_window_mode")
+	if not is_fullscreen():
+		call_deferred("apply_saved_window_mode")
 
 func set_fullscreen(enabled: bool) -> void:
 	if not is_instance_valid(target_window):
@@ -78,11 +77,20 @@ func set_fullscreen(enabled: bool) -> void:
 		target_window.mode = Window.MODE_FULLSCREEN
 		return
 	target_window.mode = Window.MODE_WINDOWED
-	target_window.borderless = false
-	# 有边框窗口设置的是客户端区域尺寸，避免 Windows 标题栏和边框造成内容裁剪。
-	# 不使用滚动容器，保持完整 UI 缩放布局。
+	target_window.borderless = true
 	target_window.size = _window_size()
 	call_deferred("_center_window")
+
+func drag_window() -> void:
+	if not _active or not is_instance_valid(target_window) or DisplayServer.get_name().to_lower() == "headless" or is_fullscreen():
+		return
+	DisplayServer.window_start_drag(target_window.get_window_id())
+
+func toggle_maximized() -> void:
+	if not _active or not is_instance_valid(target_window) or is_fullscreen():
+		return
+	target_window.mode = Window.MODE_WINDOWED if target_window.mode == Window.MODE_MAXIMIZED else Window.MODE_MAXIMIZED
+	target_window.borderless = true
 
 func _center_window() -> void:
 	if not is_instance_valid(target_window):

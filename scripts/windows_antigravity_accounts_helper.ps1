@@ -143,6 +143,25 @@ function Convert-Quota($Response) {
     return @{ ok = $true; logged_in = $true; models = $models; email = [string]$status.email; checked_at = [DateTime]::UtcNow.ToString('o'); message = '登录状态和额度已更新。' }
 }
 
+function Get-QuotaDiscoveryFailure($Processes, [string]$ProfilePath, [int]$ProfileServers, [int]$TokenServers) {
+    $editors = @($Processes | Where-Object { Test-ProfileEditor $_ $ProfilePath })
+    $unreadable = @($Processes | Where-Object { ($_.Name -like 'language_server*' -or $_.Name -in @('Antigravity.exe','Antigravity IDE.exe')) -and [string]::IsNullOrWhiteSpace($_.CommandLine) })
+    if ($TokenServers -gt 0) { return $null }
+    if ($ProfileServers -gt 0) {
+        return @{ok=$false; editor_running=$true; discovery='unsupported_arguments'; message='已找到此账号的语言服务，但无法识别其本地接口参数。当前 Antigravity 版本可能不兼容，额度未知。'}
+    }
+    if ($editors.Count -eq 0 -and $unreadable.Count -gt 0) {
+        return @{ok=$false; discovery='process_access_denied'; message='存在无法读取启动参数的 Antigravity 进程，无法确认其账号归属。请让 HexagonProxy 与 Antigravity 使用相同权限运行后重试。未将其他账号的额度计入此账号。'}
+    }
+    if ($editors.Count -eq 0) {
+        return @{ok=$false; editor_running=$false; discovery='profile_not_running'; message='此账号的独立窗口未运行；检测到的其他 Antigravity 窗口不属于此配置。请点击此账号旁的“切换”，等待对应窗口启动后刷新。已保存的登录记录不代表窗口正在运行。'}
+    }
+    if ($unreadable.Count -gt 0) {
+        return @{ok=$false; editor_running=$true; discovery='process_access_denied'; message='此账号窗口正在运行，但存在无法读取的语言服务或子进程。请让两个程序使用相同权限运行，再刷新额度。'}
+    }
+    return @{ok=$false; editor_running=$true; discovery='server_not_started'; message='此账号窗口正在运行，但尚未找到属于它的语言服务。请等待启动完成、打开一个项目并完成登录后刷新；也可查看 Antigravity 自身是否报告语言服务启动失败。'}
+}
+
 function Read-Quota([string]$ProfilePath) {
     if (-not ('HexagonLocalCertificate' -as [type])) {
         Add-Type -TypeDefinition @'
@@ -154,7 +173,7 @@ public static class HexagonLocalCertificate {
 '@
     }
     $processes = @(Get-CimInstance Win32_Process)
-    $unreadable = @($processes | Where-Object { $_.Name -like 'language_server*' -and ([string]::IsNullOrWhiteSpace($_.ExecutablePath) -or [string]::IsNullOrWhiteSpace($_.CommandLine)) })
+    $profileServerCount = 0
     $matchingCount = 0
     $attemptCount = 0
     $lastFailure = ''
@@ -171,9 +190,12 @@ public static class HexagonLocalCertificate {
             $parentId = $ancestor.ParentProcessId
             $ancestor = $processes | Where-Object { $_.ProcessId -eq $parentId } | Select-Object -First 1
         }
-        if (-not $matchesProfile -or $server.CommandLine -notmatch '--csrf_token(?:=|\s+)([^\s"]+)') { continue }
+        if (-not $matchesProfile) { continue }
+        $profileServerCount++
+        $tokenMatch = [regex]::Match([string]$server.CommandLine, '--csrf_token(?:=|\s+)(?:"([^"]+)"|([^\s"]+))')
+        if (-not $tokenMatch.Success) { continue }
         $matchingCount++
-        $csrf = $Matches[1]
+        $csrf = if ($tokenMatch.Groups[1].Success) { $tokenMatch.Groups[1].Value } else { $tokenMatch.Groups[2].Value }
         $ports = @(Get-NetTCPConnection -OwningProcess $server.ProcessId -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort -Unique | Select-Object -First 4)
         foreach ($port in $ports) {
           foreach ($scheme in @('https','http')) {
@@ -194,7 +216,9 @@ public static class HexagonLocalCertificate {
                 $response = $request.GetResponse()
                 $reader = New-Object IO.StreamReader($response.GetResponseStream())
                 try { $body = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose(); $response.Dispose() }
-                return Convert-Quota $body
+                $quotaResult = Convert-Quota $body
+                $quotaResult.editor_running = $true
+                return $quotaResult
             } catch {
                 # Do not include request headers, command lines or tokens in errors.
                 $lastFailure = $_.Exception.GetType().Name
@@ -204,8 +228,8 @@ public static class HexagonLocalCertificate {
           }
         }
     }
-    if ($matchingCount -eq 0 -and $unreadable.Count -gt 0) { throw '无法读取 Antigravity 语言服务进程信息（权限不足）。请让 HexagonProxy 与 Antigravity 使用相同权限运行；若 Antigravity 以管理员启动，HexagonProxy 也需以管理员启动。' }
-    if ($matchingCount -eq 0) { throw '未找到所选配置的语言服务。请先打开该账号配置、完成登录并打开一个项目，再刷新额度。' }
+    $discoveryFailure = Get-QuotaDiscoveryFailure $processes $ProfilePath $profileServerCount $matchingCount
+    if ($discoveryFailure) { return $discoveryFailure }
     throw "所选账号的本地额度接口查询失败（尝试 $attemptCount 次；$lastFailure）。请检查登录状态，或当前 Antigravity 版本的接口兼容性。"
 }
 

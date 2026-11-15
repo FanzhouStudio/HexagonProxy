@@ -1,8 +1,9 @@
-param(
-    [ValidateSet("hide", "show")]
+﻿param(
+    [ValidateSet("hide", "show", "watch")]
     [string]$Action,
     [int]$ProcessId,
-    [string]$WindowTitle
+    [string]$WindowTitle,
+    [string]$CommandPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,7 +33,8 @@ public static class HexagonWindowApi {
 }
 "@
 
-$window = [IntPtr]::Zero
+function Invoke-WindowAction([string]$RequestedAction) {
+$script:window = [IntPtr]::Zero
 $callback = [HexagonWindowApi+EnumWindowsProc]{
     param([IntPtr]$handle, [IntPtr]$state)
     $ownerPid = [uint32]0
@@ -48,12 +50,35 @@ $callback = [HexagonWindowApi+EnumWindowsProc]{
 }
 
 [void][HexagonWindowApi]::EnumWindows($callback, [IntPtr]::Zero)
-if ($window -eq [IntPtr]::Zero) { exit 2 }
+if ($window -eq [IntPtr]::Zero) { return }
 
-if ($Action -eq "hide") {
+if ($RequestedAction -eq "hide") {
     [void][HexagonWindowApi]::ShowWindowAsync($window, 0)
 } else {
     [void][HexagonWindowApi]::ShowWindowAsync($window, 9)
-    Start-Sleep -Milliseconds 80
     [void][HexagonWindowApi]::SetForegroundWindow($window)
 }
+}
+
+if ($Action -ne 'watch') { Invoke-WindowAction $Action; exit }
+# One prewarmed bridge per application. Read the latest desired state, so rapid
+# hide/show clicks cannot leave independently spawned helpers racing each other.
+$parent = Get-Process -Id $ProcessId -ErrorAction Stop
+$watcher = New-Object IO.FileSystemWatcher ([IO.Path]::GetDirectoryName($CommandPath)), ([IO.Path]::GetFileName($CommandPath))
+$watcher.EnableRaisingEvents = $true
+$previous = ''
+try {
+    while (-not $parent.HasExited) {
+        if ([IO.File]::Exists($CommandPath)) {
+            try {
+                $command = [IO.File]::ReadAllText($CommandPath).Trim()
+                $parts = $command -split '\|', 2
+                if ($parts.Length -eq 2 -and $parts[1] -in @('hide','show') -and $command -ne $previous) {
+                    Invoke-WindowAction $parts[1]
+                    $previous = $command
+                }
+            } catch { }
+        }
+        [void]$watcher.WaitForChanged([IO.WatcherChangeTypes]::All, 200)
+    }
+} finally { $watcher.Dispose(); $parent.Dispose() }

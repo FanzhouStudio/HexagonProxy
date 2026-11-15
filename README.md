@@ -11,7 +11,7 @@
 
 <p align="center">
   <img alt="Latest Release" src="https://img.shields.io/github/v/release/FanzhouStudio/HexagonProxy?label=Release">
-  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.3.1-b7a5e8">
+  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.3.2-b7a5e8">
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-3478b8">
   <img alt="Godot" src="https://img.shields.io/badge/Godot-4.7-478cbf">
   <img alt="Mihomo" src="https://img.shields.io/badge/Core-Mihomo-16866f">
@@ -26,7 +26,7 @@
 
 HexagonProxy 将订阅、节点、系统代理、TUN、应用分流、故障切换、内置终端、Codex / Antigravity 多账号与桌面宠物整合在暖灰简约工作台中。网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理，客户端负责本地配置、交互与 Windows 集成。
 
-> **v0.3.1**：新增账号删除、QQ 风格浅色与深色主题、固定粉色六角恐龙，以及 100%–200% 字号滑条，首次使用 150% 字号。详见 [更新日志](RELEASE_NOTES_v0.3.1.md)。
+> **v0.3.2**：修正 Windows 全屏悬浮提示引发的闪烁和悬浮丢失，移除系统标题栏，优化窗口交互与控件复用；支持更换默认 Antigravity 账号，额度改为逐行进度条。详见 [更新日志](RELEASE_NOTES_v0.3.2.md)。
 
 ## 下载与首次使用
 
@@ -147,7 +147,7 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 
 账号页支持“添加账号并登录”和逐行切换，登录独立、项目与对话共享，并显示本地额度查询结果与缓存。旧配置首次迁移前请保存并完整退出对应账号及后台；迁移会保留原目录备份。详见 [账号与共享工作区说明](docs/antigravity_accounts.md)。
 
-自建账号行提供“删除”，确认后移除列表入口和额度缓存，保留本地登录备份、项目与对话，不关闭运行中的窗口。默认账号使用原有配置，不能删除。
+账号行提供“设为默认”，默认启动使用所选账号。将新账号设为默认后，原有账号也可删除；当前默认账号需先更换默认设置才能删除。“删除”经确认后移除列表入口和额度缓存，保留本地登录备份、项目与对话，不关闭运行中的窗口。额度详情按模型逐行显示剩余百分比和进度条，重置时间可在进度条提示中查看。
 
 - 左侧新增“Antigravity”页面，自动查找当前用户安装的主程序，也可手动选择 `Antigravity.exe` / `Antigravity IDE.exe`。
 - 先在总览连接代理，完整退出 Antigravity，再点击“启用 / 同步端口”；之后使用“通过代理启动”。无需开启 TUN 或 Windows 系统代理。
@@ -162,6 +162,7 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 - 系统托盘驻留与窗口恢复。
 - 可选开机自启。
 - 右上角提供最小化、关闭到托盘与安全退出入口。
+- 全屏和窗口模式均隐藏 Windows 系统标题栏。窗口模式可拖动应用顶部标题移动，双击最大化或还原；在设置中选择全屏或指定窗口尺寸。
 - ESC 可快速打开/取消退出确认。
 - 正常退出时恢复系统代理并停止由 HexagonProxy 启动的 Mihomo。
 - 可拖动透明桌面宠物显示当前节点与延迟状态。
@@ -171,6 +172,9 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 - 提供暖灰简约、流光浅色和暮紫深色主题，可实时切换并持久化。浅色采用粉紫、奶杏、薄荷渐变，深色采用灰紫与石墨灰分区，统一平面按钮、卡片、输入框与开关。
 - 六角恐龙使用固定粉色配色，不随主题或连接状态染色。正文采用浅底深字、深底白字，并用轻微投影和细描边提高可读性。
 - 设置页提供 100%–200% 字号滑条，原有字号为 100%，新版首次采用 150%。拖动可实时预览并自动保存；字号与主题分别记忆，大字号下设置内容可滚动查看。
+- 页面切换复用导航样式，账号与额度未变化时复用控件和滚动位置；Windows 窗口助手预先启动并重复使用，减少关闭到托盘及恢复时的停顿，连续点击以最后一次操作为准。
+- 前台持续绘制以及时响应鼠标悬浮，隐藏到托盘时才启用省电绘制；模型额度和查询时间原地更新，刷新不重建账号卡片及进度条。
+- 提示框和普通弹出界面在主窗口内部显示，避免 Windows 全屏下悬浮提示创建独立窗口导致闪烁及悬浮丢失；桌面宠物仍使用独立透明窗口。
 - UI 使用数据驱动的纹理主题与统一 `UiFactory`。
 - 节点结构变化采用双缓冲网格：新列表构建完成后再一次性交换，避免刷新空白帧。
 - 水族背景拆分为静态背景层与独立气泡动画层，减少全屏重绘压力。

@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../scripts/windows_antigravity_accounts_helper.ps1') -Library
 $Root = Join-Path $PSScriptRoot '../temp_appdata/account-helper-fixture'
 $ExePath = 'C:\fixture\Antigravity.exe'
@@ -29,5 +29,19 @@ $quota = Convert-Quota $sample
 if ($quota.models.Count -ne 2 -or $quota.models[0].remaining -ne 0 -or $quota.models[1].remaining -ne 75) { throw 'Quota normalization failed' }
 try { Convert-Quota @{userStatus=@{}}; throw 'Empty quota accepted' } catch { if ($_.Exception.Message -eq 'Empty quota accepted') { throw } }
 function Get-CimInstance { return @() }
-try { Read-Quota $path; throw 'No server accepted' } catch { if ($_.Exception.Message -eq 'No server accepted' -or -not ('HexagonLocalCertificate' -as [type])) { throw } }
+$missing = Read-Quota $path
+if ($missing.ok -or $missing.discovery -ne 'profile_not_running' -or $missing.editor_running) { throw 'Missing editor must not be confused with a logged-out account' }
+$AccountId = '0123456789abcdef0123456789abcdef'
+$editor = @{Name='Antigravity.exe';ProcessId=10;ParentProcessId=1;CommandLine=('"C:\fixture\Antigravity.exe" --user-data-dir="' + (Join-Path $path 'data') + '"')}
+$otherEditor = @{Name='Antigravity.exe';ProcessId=20;ParentProcessId=1;CommandLine='"C:\fixture\Antigravity.exe"'}
+$failure = Get-QuotaDiscoveryFailure @($otherEditor) $path 0 0
+if ($failure.discovery -ne 'profile_not_running') { throw 'Default window cannot stand in for another account' }
+$failure = Get-QuotaDiscoveryFailure @($editor) $path 0 0
+if ($failure.discovery -ne 'server_not_started' -or -not $failure.editor_running) { throw 'Missing server must report selected window state' }
+$unreadableEditor = @{Name='Antigravity.exe';CommandLine=$null}
+$failure = Get-QuotaDiscoveryFailure @($otherEditor,$unreadableEditor) $path 0 0
+if ($failure.discovery -ne 'process_access_denied' -or $failure.ContainsKey('editor_running')) { throw 'Unreadable editor cannot be classified as stopped' }
+$failure = Get-QuotaDiscoveryFailure @($editor) $path 1 0
+if ($failure.discovery -ne 'unsupported_arguments') { throw 'Unknown interface arguments must be distinguished from missing server' }
+if ($null -ne (Get-QuotaDiscoveryFailure @($editor) $path 1 1)) { throw 'Valid selected server rejected' }
 Write-Output 'PASS: isolated child launch environment, default profile, traversal rejection and quota parsing'

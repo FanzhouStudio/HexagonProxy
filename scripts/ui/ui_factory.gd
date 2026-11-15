@@ -34,6 +34,9 @@ var _tracked_inputs: Array = []
 var _tracked_backgrounds: Array[CanvasItem] = []
 var _tracked_sliders: Array[HSlider] = []
 var _created_since_prune := 0
+var _theme_revision := 0
+var _style_cache: Dictionary = {}
+var _semantic_roles: Dictionary = {}
 
 func _init(theme_or_text: Variant = {}, muted := Color("527384"), green := Color("16866f"), green_dark := Color("c5f1dfde"), border := Color("a8e8e8e8"), surface := Color("e9fbfbd4"), surface_2 := Color("d8f4f3dc"), crystal := Color("f7ffffdf")) -> void:
 	if theme_or_text is Dictionary:
@@ -42,6 +45,8 @@ func _init(theme_or_text: Variant = {}, muted := Color("527384"), green := Color
 		apply_theme(_legacy_snapshot(theme_or_text, muted, green, green_dark, border, surface, surface_2, crystal))
 
 func apply_theme(snapshot: Dictionary) -> void:
+	if not _theme.is_empty() and _theme == snapshot:
+		return
 	var previous_palette := _theme.duplicate(false)
 	var next_palette := snapshot.duplicate(false)
 	previous_palette.erase("font_size_percent")
@@ -49,6 +54,12 @@ func apply_theme(snapshot: Dictionary) -> void:
 	var fonts_only := not _theme.is_empty() and previous_palette == next_palette and font_size_percent != int(snapshot.get("font_size_percent", 100))
 	_theme = snapshot.duplicate(true)
 	_colors = snapshot.get("colors", {}) if snapshot.get("colors", {}) is Dictionary else {}
+	_semantic_roles.clear()
+	for role in _colors:
+		var raw: Variant = _colors[role]
+		var candidate: Color = Color(str(raw)) if raw is String else raw if raw is Color else Color.TRANSPARENT
+		if not _semantic_roles.has(candidate.to_html()):
+			_semantic_roles[candidate.to_html()] = role
 	_textures = snapshot.get("button_textures", {}) if snapshot.get("button_textures", {}) is Dictionary else {}
 	_panel_textures = snapshot.get("panel_textures", {}) if snapshot.get("panel_textures", {}) is Dictionary else {}
 	font_scale = float(snapshot.get("font_scale", 1.18))
@@ -70,6 +81,8 @@ func apply_theme(snapshot: Dictionary) -> void:
 	if fonts_only:
 		_resize_tracked_fonts()
 	else:
+		_theme_revision += 1
+		_style_cache.clear()
 		_retheme_tracked()
 	theme_applied.emit()
 
@@ -201,6 +214,10 @@ func small_choice_button(text: String, color_value: Color = Color.TRANSPARENT) -
 	return result
 
 func apply_nav_button(button: Button, active: bool) -> void:
+	var signature := "%d/%d/%s" % [_theme_revision, _scaled_font(13), active]
+	if button.get_meta("ui_nav_signature", "") == signature:
+		return
+	button.set_meta("ui_nav_signature", signature)
 	button.set_meta("ui_nav", true)
 	button.set_meta("ui_nav_active", active)
 	button.add_theme_font_size_override("font_size", _scaled_font(13))
@@ -208,9 +225,20 @@ func apply_nav_button(button: Button, active: bool) -> void:
 	button.add_theme_stylebox_override("normal", _texture_style("pressed" if active else "normal", true))
 	if bool(_theme.get("flat", false)):
 		button.add_theme_color_override("font_color", text_color if active else muted_color)
-		button.add_theme_stylebox_override("normal", style(color("nav_active") if active else color("nav"), Color.TRANSPARENT, 6, 0))
-		button.add_theme_stylebox_override("hover", style(surface_2_color, Color.TRANSPARENT, 6, 0))
-		button.add_theme_stylebox_override("pressed", style(color("nav_active"), Color.TRANSPARENT, 6, 0))
+		button.add_theme_stylebox_override("normal", _cached_flat_style(color("nav_active") if active else color("nav"), Color.TRANSPARENT, 6, 0))
+		button.add_theme_stylebox_override("hover", _cached_flat_style(surface_2_color, Color.TRANSPARENT, 6, 0))
+		button.add_theme_stylebox_override("pressed", _cached_flat_style(color("nav_active"), Color.TRANSPARENT, 6, 0))
+
+func apply_window_action_theme(button: Button) -> void:
+	var hover_fill := surface_2_color.lerp(green_color, 0.24)
+	button.add_theme_stylebox_override("hover", _cached_flat_style(hover_fill, green_color, 6, 1))
+	button.add_theme_stylebox_override("pressed", _cached_flat_style(surface_2_color.lerp(green_color, 0.4), green_color, 6, 1))
+	# Keep normal/hover/pressed margins identical, so hover cannot move the layout.
+	for state in ["normal", "hover", "pressed"]:
+		var box := button.get_theme_stylebox(state).duplicate() as StyleBox
+		box.content_margin_left = 14
+		box.content_margin_right = 14
+		button.add_theme_stylebox_override(state, box)
 
 func apply_rail_button(button: Button, active: bool) -> void:
 	apply_nav_button(button, active)
@@ -376,7 +404,7 @@ func _panel_style(fill: Color, border: Color, radius: int, compact := false) -> 
 	var role := _panel_texture_role(_semantic_role(fill))
 	var path := str(_panel_textures.get(role, ""))
 	if path.is_empty():
-		return style(fill, border, radius, 1)
+		return _cached_flat_style(fill, border, radius, 1)
 	var box := StyleBoxTexture.new()
 	box.texture = _load_svg_texture(path)
 	box.set_meta("source_path", path)
@@ -405,6 +433,9 @@ func _panel_texture_role(role: String) -> String:
 
 func _texture_style(state: String, compact := false) -> StyleBox:
 	if bool(_theme.get("flat", false)):
+		var key := "button/%s/%s" % [state, compact]
+		if _style_cache.has(key):
+			return _style_cache[key]
 		var fill := surface_2_color
 		if state == "hover":
 			fill = color("nav_active")
@@ -413,6 +444,7 @@ func _texture_style(state: String, compact := false) -> StyleBox:
 		var flat := style(fill, border_color, 6, 1)
 		flat.content_margin_left = 14
 		flat.content_margin_right = 14
+		_style_cache[key] = flat
 		return flat
 	var path := str(_textures.get(state, _textures.get("normal", "")))
 	var box := StyleBoxTexture.new()
@@ -441,6 +473,12 @@ func _load_svg_texture(path: String) -> Texture2D:
 	_texture_cache[path] = texture
 	return texture
 
+func _cached_flat_style(fill: Color, border: Color, radius: int, width: int) -> StyleBoxFlat:
+	var key := "%s/%s/%d/%d" % [fill.to_html(), border.to_html(), radius, width]
+	if not _style_cache.has(key):
+		_style_cache[key] = style(fill, border, radius, width)
+	return _style_cache[key]
+
 func _apply_button_textures(button: Button, compact: bool) -> void:
 	button.add_theme_stylebox_override("normal", _texture_style("normal", compact))
 	button.add_theme_stylebox_override("hover", _texture_style("hover", compact))
@@ -467,12 +505,7 @@ func _semantic_role(value: Color) -> String:
 	var legacy := _role_from_color(value)
 	if not legacy.is_empty():
 		return legacy
-	for role in _colors:
-		var raw: Variant = _colors[role]
-		var candidate: Color = Color(str(raw)) if raw is String else raw if raw is Color else Color.TRANSPARENT
-		if candidate.to_html() == value.to_html():
-			return str(role)
-	return ""
+	return str(_semantic_roles.get(value.to_html(), ""))
 
 func _role_from_color(value: Color) -> String:
 	match value.to_html(false).to_lower():
@@ -559,6 +592,8 @@ func _retheme_tracked() -> void:
 			_apply_text_depth(node, button_color)
 			if node.get_meta("ui_primary", false):
 				_apply_button_textures(node, compact)
+			if node.get_meta("ui_window_action", false):
+				apply_window_action_theme(node)
 	for toggle in _tracked_toggles:
 		if is_instance_valid(toggle):
 			apply_crystal_toggle_theme(toggle)

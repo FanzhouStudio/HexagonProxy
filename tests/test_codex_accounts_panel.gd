@@ -24,6 +24,10 @@ func _run() -> void:
 		"login_present": true
 	}]
 	panel.render({"installed": true, "running": true, "selected_id": "default"}, profiles)
+	var initial_row: int = panel.profile_list.get_child(0).get_instance_id()
+	for tick in 10:
+		panel.render({"installed": true, "running": true, "selected_id": "default"}, profiles)
+		assert(panel.profile_list.get_child(0).get_instance_id() == initial_row, "Repeated background status cannot rebuild Codex account rows")
 	if panel.status_label == null or not panel.status_label.text.contains("Codex 正在运行"):
 		_fail("Codex 运行状态没有正确渲染", 2)
 		return

@@ -76,7 +76,9 @@ func view_state() -> Dictionary:
 	state.merge({"exe_path": _exe_path, "busy": _busy, "current_port": proxy_config.mixed_port() if proxy_config else 7890}, true)
 	state["accounts"] = accounts.list()
 	state["selected_account"] = accounts.selected
+	state["default_account"] = accounts.default_account
 	state["quota_snapshots"] = accounts.quotas.duplicate(true)
+	state["account_sessions"] = accounts.session_states.duplicate(true)
 	return state
 
 func set_executable(path: String) -> Dictionary:

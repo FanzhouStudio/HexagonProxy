@@ -6,35 +6,44 @@ var workspace_home_override := ""
 var storage := ""
 var entries: Array = []
 var selected := "default"
+var default_account := "default"
+var original_visible := true
 var busy := false
 var quotas: Dictionary = {}
+var session_states: Dictionary = {}
 
 func initialize(path: String) -> void:
 	storage = path
 	DirAccess.make_dir_recursive_absolute(storage)
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(storage.path_join("index.json"))) if FileAccess.file_exists(storage.path_join("index.json")) else {}
 	if parsed is Dictionary:
+		original_visible = bool(parsed.get("original_visible", true))
+		default_account = str(parsed.get("default_account", "default"))
 		if parsed.get("quotas", {}) is Dictionary:
 			quotas = parsed.get("quotas", {})
 		for item in parsed.get("entries", []):
 			if item is Dictionary and str(item.get("id", "")).length() == 32 and str(item.id).is_valid_hex_number(false):
 				entries.append(item)
 		selected = str(parsed.get("selected", "default"))
+	if not exists(default_account):
+		default_account = str(entries[0].id) if not original_visible and not entries.is_empty() else "default"
+		if default_account == "default":
+			original_visible = true
 	if not exists(selected):
-		selected = "default"
+		selected = default_account
 
 func exists(id: String) -> bool:
-	return id == "default" or entries.any(func(item: Dictionary) -> bool: return item.id == id)
+	return (id == "default" and original_visible) or entries.any(func(item: Dictionary) -> bool: return item.id == id)
 
 func list() -> Array:
-	return [{"id": "default", "name": "默认账号（原有配置）"}] + entries.duplicate(true)
+	return ([{"id": "default", "name": "原有账号"}] if original_visible else []) + entries.duplicate(true)
 
 func save() -> bool:
 	var path := storage.path_join("index.json")
 	var file := FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if not file:
 		return false
-	file.store_string(JSON.stringify({"entries": entries, "selected": selected, "quotas": quotas}))
+	file.store_string(JSON.stringify({"entries": entries, "selected": selected, "quotas": quotas, "default_account": default_account, "original_visible": original_visible}))
 	file.close()
 	return DirAccess.rename_absolute(path + ".tmp", path) == OK
 
@@ -53,25 +62,40 @@ func add(name: String) -> Dictionary:
 		return {"ok": false, "message": "账号列表保存失败。"}
 	return {"ok": true, "id": id, "message": "账号已添加，正在打开官方登录窗口。"}
 
+func set_default_account(id: String) -> Dictionary:
+	if busy or not exists(id):
+		return {"ok": false, "message": "账号操作进行中或账号不存在。"}
+	var previous := default_account
+	default_account = id
+	if not save():
+		default_account = previous
+		return {"ok": false, "message": "默认账号保存失败，设置未改变。"}
+	return {"ok": true, "message": "已设为默认账号；默认启动将使用此账号，其他账号可从列表删除。"}
+
 func remove_account(id: String) -> Dictionary:
 	if busy:
 		return {"ok": false, "message": "账号操作正在进行，请稍后再删除。"}
-	if id == "default":
-		return {"ok": false, "message": "默认账号使用原有配置，不能删除。"}
+	if id == default_account:
+		return {"ok": false, "message": "请先将其他账号设为默认，再删除此账号。"}
 	if not exists(id):
 		return {"ok": false, "message": "账号不存在或已删除。"}
 	var previous_entries := entries.duplicate(true)
 	var previous_quotas := quotas.duplicate(true)
 	var previous_selected := selected
+	var previous_visible := original_visible
+	if id == "default":
+		original_visible = false
 	entries = entries.filter(func(item: Dictionary) -> bool: return str(item.id) != id)
 	quotas.erase(id)
 	if selected == id:
-		selected = "default"
+		selected = default_account
 	if not save():
 		entries = previous_entries
 		quotas = previous_quotas
 		selected = previous_selected
+		original_visible = previous_visible
 		return {"ok": false, "message": "账号列表保存失败，未删除账号。"}
+	session_states.erase(id)
 	# Profiles contain junctions to shared projects and conversations. Match Codex's
 	# forget operation: only remove index metadata, never traverse profile folders.
 	return {"ok": true, "message": "已删除账号入口和额度缓存；本地登录备份、项目和对话仍保留，运行中的窗口不受影响。"}
@@ -134,6 +158,10 @@ func run(action: String, id: String, executable: String) -> Dictionary:
 		if not save():
 			result.message = "已打开配置，但默认选择保存失败。"
 	elif action == "quota":
+		var session: Dictionary = {"discovery": result.get("discovery", "")}
+		if result.has("editor_running"):
+			session["editor_running"] = result.editor_running
+		session_states[id] = session
 		for entry in entries:
 			if entry.id == id and result.has("logged_in"):
 				entry["logged_in"] = result.logged_in

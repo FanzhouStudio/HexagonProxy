@@ -26,6 +26,10 @@ func _on_window_action_requested(action_id: String) -> void:
 	if not _active:
 		return
 	match action_id:
+		"drag":
+			window_controller.drag_window()
+		"maximize":
+			window_controller.toggle_maximized()
 		"minimize":
 			window_controller.minimize_window()
 		"close":

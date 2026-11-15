@@ -44,6 +44,7 @@ var _row_actions: Array[Button] = []
 var _reset_labels: Array[Label] = []
 var _profile_count := 0
 var _countdown_elapsed := 0.0
+var _profile_snapshot: Dictionary = {}
 
 func _process(delta: float) -> void:
 	_countdown_elapsed += delta
@@ -88,7 +89,10 @@ func render(state: Dictionary, profiles: Array) -> void:
 		create_button.disabled = _busy
 	if is_instance_valid(launch_button):
 		launch_button.disabled = not installed or _running
-	_rebuild_profiles(profiles)
+	var next_snapshot := {"profiles": profiles, "running": _running, "installed": _installed, "selected": _selected_id}
+	if _profile_snapshot != next_snapshot:
+		_profile_snapshot = next_snapshot.duplicate(true)
+		_rebuild_profiles(profiles)
 	_update_buttons()
 
 func show_message(message: String, success: bool) -> void:

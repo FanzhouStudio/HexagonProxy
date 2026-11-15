@@ -66,6 +66,7 @@ Invoke-IsolatedGodotTest "ui_redesign" "res://tests/test_ui_redesign.gd" "UI red
 Invoke-IsolatedGodotTest "ui_refresh" "res://tests/test_ui_refresh_stability.gd" "UI refresh performance regressions failed"
 Invoke-IsolatedGodotTest "startup_intro" "res://tests/test_startup_intro.gd" "Startup intro tests failed"
 Invoke-IsolatedGodotTest "layout_1080" "res://tests/test_layout_1080.gd" "1920x1080 layout test failed"
+Invoke-IsolatedGodotTest "window_chrome" "res://tests/test_window_chrome_coordinator.gd" "Window title controls test failed"
 Invoke-IsolatedGodotTest "node_failover" "res://tests/test_node_failover.gd" "Node failover test failed"
 Invoke-IsolatedGodotTest "brand_identity" "res://tests/test_brand_identity.gd" "Brand identity test failed"
 Invoke-IsolatedGodotTest "codex_profiles" "res://tests/test_codex_profile_service.gd" "Codex profile test failed"

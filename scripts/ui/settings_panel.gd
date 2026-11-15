@@ -144,7 +144,8 @@ func _build_window_card() -> PanelContainer:
 	margin.add_child(column)
 	column.add_child(ui.label("窗口显示", 18, TEXT))
 	window_borderless_toggle = CheckButton.new()
-	window_borderless_toggle.text = "无边框模式（自动适配屏幕）"
+	window_borderless_toggle.text = "全屏显示（自动适配屏幕）"
+	window_borderless_toggle.tooltip_text = "关闭后使用所选窗口尺寸；两种模式均隐藏系统标题栏。窗口模式可拖动顶部标题移动，双击最大化或还原。"
 	ui.apply_crystal_toggle_theme(window_borderless_toggle)
 	window_borderless_toggle.set_pressed_no_signal(proxy_config.window_borderless() if proxy_config.has_method("window_borderless") else true)
 	column.add_child(window_borderless_toggle)

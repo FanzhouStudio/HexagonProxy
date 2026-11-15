@@ -15,6 +15,13 @@ func _run() -> void:
 	if root.mode not in [Window.MODE_FULLSCREEN, Window.MODE_EXCLUSIVE_FULLSCREEN] or not root.borderless:
 		_fail("主窗口没有进入无边框全屏模式", 3)
 		return
+	assert(root.gui_embed_subwindows, "Fullscreen controls cannot create native tooltip windows")
+	assert(scene.resident.desktop_pet.pet_window.force_native, "Desktop pet must remain an independent window")
+	var theme_popup: PopupMenu = scene.settings_panel.theme_selector.get_popup()
+	theme_popup.popup(Rect2i(300, 150, 300, 180))
+	await process_frame
+	assert(theme_popup.is_embedded(), "Real fullscreen dropdowns must remain inside the main window")
+	theme_popup.hide()
 
 	var f11 := InputEventKey.new()
 	f11.keycode = KEY_F11
