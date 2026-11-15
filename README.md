@@ -11,7 +11,7 @@
 
 <p align="center">
   <img alt="Latest Release" src="https://img.shields.io/github/v/release/FanzhouStudio/HexagonProxy?label=Release">
-  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.3.0-d4b77b">
+  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.3.1-b7a5e8">
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-3478b8">
   <img alt="Godot" src="https://img.shields.io/badge/Godot-4.7-478cbf">
   <img alt="Mihomo" src="https://img.shields.io/badge/Core-Mihomo-16866f">
@@ -26,7 +26,7 @@
 
 HexagonProxy 将订阅、节点、系统代理、TUN、应用分流、故障切换、内置终端、Codex / Antigravity 多账号与桌面宠物整合在暖灰简约工作台中。网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理，客户端负责本地配置、交互与 Windows 集成。
 
-> **v0.3.0**：全新暖灰界面与六角恐龙启动动画，Antigravity 多账号、共享项目与对话，下载与诊断修复，以及节点刷新性能优化。详见 [更新日志](RELEASE_NOTES_v0.3.0.md)。
+> **v0.3.1**：新增账号删除、QQ 风格浅色与深色主题、固定粉色六角恐龙，以及 100%–200% 字号滑条，首次使用 150% 字号。详见 [更新日志](RELEASE_NOTES_v0.3.1.md)。
 
 ## 下载与首次使用
 
@@ -147,6 +147,8 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 
 账号页支持“添加账号并登录”和逐行切换，登录独立、项目与对话共享，并显示本地额度查询结果与缓存。旧配置首次迁移前请保存并完整退出对应账号及后台；迁移会保留原目录备份。详见 [账号与共享工作区说明](docs/antigravity_accounts.md)。
 
+自建账号行提供“删除”，确认后移除列表入口和额度缓存，保留本地登录备份、项目与对话，不关闭运行中的窗口。默认账号使用原有配置，不能删除。
+
 - 左侧新增“Antigravity”页面，自动查找当前用户安装的主程序，也可手动选择 `Antigravity.exe` / `Antigravity IDE.exe`。
 - 先在总览连接代理，完整退出 Antigravity，再点击“启用 / 同步端口”；之后使用“通过代理启动”。无需开启 TUN 或 Windows 系统代理。
 - 使用 [yuaotian/antigravity-proxy](https://github.com/yuaotian/antigravity-proxy) v2.4 桌面 x64 组件，将 Antigravity 及匹配的语言服务子进程连接交给本机 SOCKS5 混合端口。保留上游默认的端口与本地地址旁路规则。
@@ -166,7 +168,9 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 
 ### 界面与性能
 
-- 海蓝治愈 / 夜海黑两套主题，可实时切换并持久化。
+- 提供暖灰简约、流光浅色和暮紫深色主题，可实时切换并持久化。浅色采用粉紫、奶杏、薄荷渐变，深色采用灰紫与石墨灰分区，统一平面按钮、卡片、输入框与开关。
+- 六角恐龙使用固定粉色配色，不随主题或连接状态染色。正文采用浅底深字、深底白字，并用轻微投影和细描边提高可读性。
+- 设置页提供 100%–200% 字号滑条，原有字号为 100%，新版首次采用 150%。拖动可实时预览并自动保存；字号与主题分别记忆，大字号下设置内容可滚动查看。
 - UI 使用数据驱动的纹理主题与统一 `UiFactory`。
 - 节点结构变化采用双缓冲网格：新列表构建完成后再一次性交换，避免刷新空白帧。
 - 水族背景拆分为静态背景层与独立气泡动画层，减少全屏重绘压力。

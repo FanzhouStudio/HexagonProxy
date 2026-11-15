@@ -16,14 +16,14 @@ func setup(factory: UiFactory, title_text: String, message_text: String, confirm
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var veil := ColorRect.new()
-	veil.color = Color("0a354552")
+	veil.color = Color("00000055")
 	veil.mouse_filter = Control.MOUSE_FILTER_STOP
 	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(veil)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
-	var card := ui.panel(Color("f6fffff5"), Color("bfffffff"), 20)
+	var card := ui.panel(ui.crystal_white_color, ui.border_color, 8)
 	card.custom_minimum_size = Vector2(520, 220)
 	center.add_child(card)
 	var margin := ui.margin(28, 24, 28, 22)

@@ -5,6 +5,18 @@ var samples: Array[float] = []
 var accent := Color("16866f")
 var background := Color("403d37")
 var grid := Color("605c54")
+var _ui: UiFactory
+
+func setup(factory: UiFactory) -> void:
+	_ui = factory
+	_ui.theme_applied.connect(_apply_theme)
+	_apply_theme()
+
+func _apply_theme() -> void:
+	accent = _ui.green_color
+	background = _ui.color("graph_bg", _ui.crystal_white_color)
+	grid = _ui.color("graph_grid", _ui.border_color)
+	queue_redraw()
 
 func push_sample(value: float) -> void:
 	samples.append(maxf(value, 0.0))
@@ -29,7 +41,7 @@ func _draw() -> void:
 	if points.size() > 1:
 		draw_polyline(points, accent, 3.0, true)
 		for point in points:
-			draw_circle(point, 2.2, Color("74ccb1"))
+			draw_circle(point, 2.2, accent.lightened(0.12))
 
 func _box(fill: Color, border: Color, radius: int) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()

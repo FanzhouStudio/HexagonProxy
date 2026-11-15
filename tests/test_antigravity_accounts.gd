@@ -2,6 +2,10 @@ extends SceneTree
 
 const Accounts = preload("res://scripts/modules/antigravity/antigravity_accounts.gd")
 
+class FailingStore extends Accounts:
+	func save() -> bool:
+		return false
+
 func _init() -> void:
 	call_deferred("_run")
 
@@ -25,6 +29,32 @@ func _run() -> void:
 	reopened.initialize(path)
 	assert(reopened.selected == added.id and reopened.list().size() == 3)
 	assert(reopened.quotas[added.id].models[0].remaining == 0)
+	assert(not reopened.remove_account("default").ok, "Original account cannot be removed")
+	assert(not reopened.remove_account("../outside").ok)
+	reopened.busy = true
+	assert(not reopened.remove_account(added.id).ok and reopened.exists(added.id), "An in-flight account operation blocks deletion")
+	reopened.busy = false
+	var failing := FailingStore.new()
+	root.add_child(failing)
+	failing.initialize(path)
+	assert(not failing.remove_account(added.id).ok)
+	assert(failing.exists(added.id) and failing.selected == added.id and failing.quotas.has(added.id), "Save failures restore the entry, selection and quota")
+	failing.queue_free()
+	# A profile may link to the shared conversation tree; removal must never walk it.
+	var profile_path := path.path_join(added.id).path_join("home/.gemini/antigravity")
+	DirAccess.make_dir_recursive_absolute(profile_path)
+	var history := FileAccess.open(profile_path.path_join("history-fixture.txt"), FileAccess.WRITE)
+	history.store_string("preserve projects, login backups and conversations")
+	history.close()
+	assert(reopened.remove_account(added.id).ok)
+	assert(not reopened.exists(added.id) and not reopened.quotas.has(added.id) and reopened.selected == "default")
+	assert(FileAccess.get_file_as_string(profile_path.path_join("history-fixture.txt")) == "preserve projects, login backups and conversations")
+	var after_removal := Accounts.new()
+	root.add_child(after_removal)
+	after_removal.initialize(path)
+	assert(not after_removal.exists(added.id) and after_removal.exists(unnamed.id) and after_removal.selected == "default" and not after_removal.quotas.has(added.id), "Deletion persists without disturbing other accounts")
+	assert(not after_removal.remove_account(added.id).ok, "Repeated deletion is rejected")
+	after_removal.queue_free()
 	var rejected: Dictionary = await reopened.run("launch", "../outside", "invalid")
 	assert(not rejected.ok)
 	var native: Dictionary = await reopened.run("launch", "default", path.path_join("missing/Antigravity.exe"))
@@ -33,5 +63,5 @@ func _run() -> void:
 	assert(helper_bytes.slice(0, 3) == PackedByteArray([0xef, 0xbb, 0xbf]), "Materialized helper must preserve BOM bytes")
 	store.queue_free()
 	reopened.queue_free()
-	print("PASS: account creation, persistence, quota cache, duplicate and invalid selection rejection")
+	print("PASS: account creation, deletion, rollback, persistence, quota cache and profile preservation")
 	quit(0)

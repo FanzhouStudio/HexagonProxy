@@ -10,6 +10,8 @@ signal port_release_confirmed(port: int, pids: PackedInt32Array)
 signal core_restart_requested
 signal core_update_requested
 signal ui_theme_requested(theme_id: String)
+signal font_size_requested(percent: int)
+signal font_size_adjustment_finished
 signal window_settings_apply_requested(borderless: bool, width: int, height: int)
 signal log_message(message: String)
 
@@ -45,6 +47,9 @@ var core_progress_label: Label
 var theme_selector: OptionButton
 var theme_description_label: Label
 var theme_message_label: Label
+var font_size_slider: HSlider
+var font_size_label: Label
+var _settings_grid: GridContainer
 var window_borderless_toggle: CheckButton
 var window_resolution_selector: OptionButton
 func setup(factory: UiFactory, config, system_proxy_enabled: bool, prompt_host: Control = null) -> void:
@@ -55,6 +60,7 @@ func setup(factory: UiFactory, config, system_proxy_enabled: bool, prompt_host: 
 
 func build() -> Control:
 	var page := GridContainer.new()
+	_settings_grid = page
 	page.columns = 2
 	page.add_theme_constant_override("h_separation", 14)
 	page.add_theme_constant_override("v_separation", 14)
@@ -64,7 +70,10 @@ func build() -> Control:
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.size_flags_vertical = Control.SIZE_FILL
 		page.add_child(card)
-	return page
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.add_child(page)
+	return scroll
 
 func pet_control() -> CheckButton:
 	return desktop_pet_toggle
@@ -88,14 +97,40 @@ func _build_appearance_card() -> PanelContainer:
 	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(words)
 	words.add_child(ui.label("色系主题", 14, TEXT))
-	theme_description_label = ui.label("海蓝治愈 · 明亮柔和的水蓝色系", 11, MUTED)
+	theme_description_label = ui.label("选择界面主题", 11, MUTED)
 	words.add_child(theme_description_label)
+	theme_description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	theme_selector = OptionButton.new()
 	theme_selector.custom_minimum_size = Vector2(210, 42)
+	theme_selector.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	ui.apply_crystal_option_theme(theme_selector)
 	theme_selector.item_selected.connect(_on_theme_selected)
 	row.add_child(theme_selector)
-	theme_message_label = ui.label("统一按钮、输入框与文字配色 · 主题切换后即时生效", 10, MUTED)
+	var font_row := HBoxContainer.new()
+	font_row.add_theme_constant_override("separation", 12)
+	column.add_child(font_row)
+	font_row.add_child(ui.label("字号大小", 13, TEXT))
+	font_size_slider = HSlider.new()
+	font_size_slider.min_value = 100
+	font_size_slider.max_value = 200
+	font_size_slider.step = 1
+	font_size_slider.value = ui.font_size_percent
+	font_size_slider.tooltip_text = "字号范围：100%–200%；100% 为原始大小。"
+	font_size_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	font_size_slider.custom_minimum_size = Vector2(140, 32)
+	ui.apply_slider_theme(font_size_slider)
+	font_size_slider.value_changed.connect(func(value: float) -> void:
+		font_size_label.text = "%d%%" % int(value)
+		font_size_slider.tooltip_text = "字号 %d%% · 支持 100%%–200%%" % int(value)
+		font_size_requested.emit(int(value))
+	)
+	font_size_slider.drag_ended.connect(func(_changed: bool) -> void: font_size_adjustment_finished.emit())
+	font_row.add_child(font_size_slider)
+	font_size_label = ui.label("%d%%" % ui.font_size_percent, 13, TEXT)
+	font_size_label.custom_minimum_size.x = 72
+	font_row.add_child(font_size_label)
+	theme_message_label = ui.label("原始字号为 100% · 拖动实时预览，自动保存", 10, MUTED)
+	theme_message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(theme_message_label)
 	return card
 
@@ -313,6 +348,10 @@ func set_theme_catalog(items: Array, current_id: String) -> void:
 		theme_selector.select(selected_index)
 
 func set_theme_state(snapshot: Dictionary) -> void:
+	if is_instance_valid(font_size_slider):
+		var percent := int(snapshot.get("font_size_percent", 100))
+		font_size_slider.set_value_no_signal(percent)
+		font_size_label.text = "%d%%" % percent
 	if is_instance_valid(theme_description_label):
 		theme_description_label.text = "%s · %s" % [str(snapshot.get("name", "界面主题")), str(snapshot.get("description", ""))]
 	if is_instance_valid(theme_selector):

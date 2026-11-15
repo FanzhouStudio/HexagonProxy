@@ -53,6 +53,29 @@ func add(name: String) -> Dictionary:
 		return {"ok": false, "message": "账号列表保存失败。"}
 	return {"ok": true, "id": id, "message": "账号已添加，正在打开官方登录窗口。"}
 
+func remove_account(id: String) -> Dictionary:
+	if busy:
+		return {"ok": false, "message": "账号操作正在进行，请稍后再删除。"}
+	if id == "default":
+		return {"ok": false, "message": "默认账号使用原有配置，不能删除。"}
+	if not exists(id):
+		return {"ok": false, "message": "账号不存在或已删除。"}
+	var previous_entries := entries.duplicate(true)
+	var previous_quotas := quotas.duplicate(true)
+	var previous_selected := selected
+	entries = entries.filter(func(item: Dictionary) -> bool: return str(item.id) != id)
+	quotas.erase(id)
+	if selected == id:
+		selected = "default"
+	if not save():
+		entries = previous_entries
+		quotas = previous_quotas
+		selected = previous_selected
+		return {"ok": false, "message": "账号列表保存失败，未删除账号。"}
+	# Profiles contain junctions to shared projects and conversations. Match Codex's
+	# forget operation: only remove index metadata, never traverse profile folders.
+	return {"ok": true, "message": "已删除账号入口和额度缓存；本地登录备份、项目和对话仍保留，运行中的窗口不受影响。"}
+
 func run(action: String, id: String, executable: String) -> Dictionary:
 	if busy or not exists(id) or action not in ["launch", "quota"]:
 		return {"ok": false, "message": "操作繁忙或账号不存在。"}

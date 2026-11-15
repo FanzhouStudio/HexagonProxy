@@ -6,11 +6,13 @@ signal event_logged(message: String)
 
 const CATALOG_PATH := "res://assets/ui/themes.json"
 const SETTINGS_PATH := "user://ui_theme.cfg"
+const DEFAULT_FONT_PERCENT := 150
 
 var _themes: Dictionary = {}
 var _order: Array[String] = []
 var _default_id := "blue_healing"
 var _current_id := "blue_healing"
+var _font_size_percent := DEFAULT_FONT_PERCENT
 
 func initialize() -> void:
 	_load_catalog()
@@ -34,7 +36,23 @@ func snapshot() -> Dictionary:
 	var data: Dictionary = _themes.get(_current_id, {})
 	var result := data.duplicate(true)
 	result["id"] = _current_id
+	result["font_size_percent"] = _font_size_percent
 	return result
+
+func set_font_size_percent(percent: int) -> Dictionary:
+	if percent < 100 or percent > 200:
+		return {"ok": false, "message": "字号大小需在 100%–200% 之间。"}
+	if percent == _font_size_percent:
+		return {"ok": true, "theme": snapshot()}
+	var previous := _font_size_percent
+	_font_size_percent = percent
+	var error := _save_selection()
+	if error != OK:
+		_font_size_percent = previous
+		return {"ok": false, "message": "字号设置保存失败：%s。" % error_string(error)}
+	var current := snapshot()
+	theme_changed.emit(current)
+	return {"ok": true, "theme": current}
 
 func set_theme(theme_id: String) -> Dictionary:
 	if not _themes.has(theme_id):
@@ -77,6 +95,7 @@ func _load_selection() -> void:
 	var settings := ConfigFile.new()
 	if settings.load(SETTINGS_PATH) != OK:
 		return
+	_font_size_percent = clampi(int(settings.get_value("ui", "font_size_percent", DEFAULT_FONT_PERCENT)), 100, 200)
 	var saved := str(settings.get_value("ui", "theme", _default_id))
 	# Apply the redesigned default once to existing installations.
 	if int(settings.get_value("ui", "design_version", 0)) < 2:
@@ -86,11 +105,12 @@ func _load_selection() -> void:
 	if _themes.has(saved):
 		_current_id = saved
 
-func _save_selection() -> void:
+func _save_selection() -> Error:
 	var settings := ConfigFile.new()
 	settings.set_value("ui", "theme", _current_id)
 	settings.set_value("ui", "design_version", 2)
-	settings.save(SETTINGS_PATH)
+	settings.set_value("ui", "font_size_percent", _font_size_percent)
+	return settings.save(SETTINGS_PATH)
 
 func dispose() -> void:
 	_themes.clear()

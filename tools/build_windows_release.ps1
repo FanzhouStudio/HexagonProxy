@@ -61,6 +61,7 @@ Invoke-IsolatedGodotTest "large_subscription" "res://tests/test_large_subscripti
 Invoke-IsolatedGodotTest "close_behavior" "res://tests/test_close_behavior.gd" "Close behavior test failed"
 Invoke-IsolatedGodotTest "hysteria2" "res://tests/test_hysteria2_conversion.gd" "Hysteria2 conversion test failed"
 Invoke-IsolatedGodotTest "ui_theme" "res://tests/test_ui_theme.gd" "UI texture/theme test failed"
+Invoke-IsolatedGodotTest "font_scaling" "res://tests/test_font_scaling.gd" "Font scaling/slider tests failed"
 Invoke-IsolatedGodotTest "ui_redesign" "res://tests/test_ui_redesign.gd" "UI redesign tests failed"
 Invoke-IsolatedGodotTest "ui_refresh" "res://tests/test_ui_refresh_stability.gd" "UI refresh performance regressions failed"
 Invoke-IsolatedGodotTest "startup_intro" "res://tests/test_startup_intro.gd" "Startup intro tests failed"

@@ -104,7 +104,7 @@ func _build_stats_row() -> HBoxContainer:
 	download_speed_label = ui.stat_card(row, "↓ 下载", "0 B/s", GREEN)
 	upload_speed_label = ui.stat_card(row, "↑ 上传", "0 B/s", BLUE)
 	connections_label = ui.stat_card(row, "◎ 连接", "0", YELLOW)
-	total_label = ui.stat_card(row, "Σ 流量", "0 B", Color("cc8cff"))
+	total_label = ui.stat_card(row, "Σ 流量", "0 B", ui.green_color)
 	return row
 
 func _build_graph_card() -> PanelContainer:
@@ -123,9 +123,7 @@ func _build_graph_card() -> PanelContainer:
 	row.add_child(title)
 	row.add_child(ui.label("最近 44 秒", 11, MUTED))
 	traffic_graph = TrafficGraphScript.new()
-	traffic_graph.accent = ui.green_color
-	traffic_graph.background = ui.crystal_white_color
-	traffic_graph.grid = ui.border_color
+	traffic_graph.setup(ui)
 	traffic_graph.custom_minimum_size.y = 116
 	traffic_graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(traffic_graph)
@@ -146,10 +144,6 @@ func _build_pet_card(profile_name: String) -> PanelContainer:
 	var screen_content := Control.new()
 	screen_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen.add_child(screen_content)
-	var scan := ColorRect.new()
-	scan.color = ui.surface_2_color
-	scan.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 10)
-	screen_content.add_child(scan)
 	pet_texture = TextureRect.new()
 	pet_texture.texture = ui.axolotl_texture()
 	pet_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -197,7 +191,7 @@ func set_status(online: bool, starting: bool, message: String) -> void:
 	status_dot.add_theme_color_override("font_color", ui.green_color if online else ui.danger_color if starting else ui.muted_color)
 	connect_toggle.set_pressed_no_signal(online or starting)
 	pet_speech.text = "路线畅通，出发！" if online else "正在热身…" if starting else "等待出发！"
-	pet_texture.modulate = Color.WHITE if online else Color(0.72, 0.76, 0.72, 1)
+	pet_texture.modulate = Color.WHITE
 
 func set_connect_pressed(value: bool) -> void:
 	if is_instance_valid(connect_toggle):
@@ -224,7 +218,7 @@ func append_log(message: String) -> void:
 	if not is_instance_valid(log_view):
 		return
 	var time := Time.get_time_string_from_system()
-	log_view.append_text("[color=#%s]%s[/color]  %s\n" % [ui.muted_color.to_html(false), time, message])
+	log_view.add_text("%s  %s\n" % [time, message])
 	log_view.scroll_to_line(maxi(log_view.get_line_count() - 1, 0))
 func apply_connections(payload: Dictionary) -> void:
 	if not _dashboard_active:

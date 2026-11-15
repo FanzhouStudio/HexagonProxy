@@ -7,140 +7,65 @@ func _init() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	var storage := ProjectSettings.globalize_path("user://ui_theme.cfg")
-	if FileAccess.file_exists(storage):
-		DirAccess.remove_absolute(storage)
 	var service = ThemeServiceScript.new()
 	root.add_child(service)
 	service.initialize()
-	if service.current_theme_id() != "qq_warm" or service.catalog().size() < 3:
-		_fail("默认主题或主题目录不正确", 2)
-		return
 	service.set_theme("blue_healing")
 	var ui = UiFactoryScript.new(service.snapshot())
 	var label := ui.label("主题文字", 13, Color("12384a"))
 	var panel := ui.panel(Color("e9fbfbd4"), Color("a8e8e8e8"), 16)
 	var dynamic_panel := ui.panel(ui.surface_color, ui.border_color, 16)
-	var dynamic_label := ui.label("动态语义文字", 13, ui.text_color)
-	var button := ui.button("纹理按钮", Color("c5f1dfde"), Color("16866f"))
-	var small_button := ui.small_choice_button("小按钮")
+	var button := ui.small_choice_button("操作")
+	var primary := ui.small_choice_button("添加账号")
+	ui.primary_button(primary)
 	var option := OptionButton.new()
-	option.custom_minimum_size.y = 40
 	ui.apply_crystal_option_theme(option)
 	var input := LineEdit.new()
-	input.custom_minimum_size.y = 42
-	ui.apply_line_edit_theme(input, 13)
+	ui.apply_line_edit_theme(input)
 	var console := RichTextLabel.new()
-	ui.apply_console_theme(console, 12)
-	var blue_style: StyleBox = button.get_theme_stylebox("normal")
-	if not blue_style is StyleBoxTexture:
-		_fail("标准按钮没有使用图片纹理底图", 3)
-		return
-	var blue_texture := blue_style as StyleBoxTexture
-	if blue_texture.texture == null or str(blue_texture.get_meta("source_path", "")).get_file() != "button_blue_normal.svg":
-		_fail("海蓝主题没有使用蓝色按钮底图", 4)
-		return
-	var blue_panel := panel.get_theme_stylebox("panel") as StyleBoxTexture
-	var blue_input := input.get_theme_stylebox("normal") as StyleBoxTexture
-	var blue_console := console.get_theme_stylebox("normal") as StyleBoxTexture
-	if blue_panel == null or str(blue_panel.get_meta("source_path", "")).get_file() != "panel_blue_surface.svg":
-		_fail("海蓝主题主卡片没有使用纹理底图", 19)
-		return
-	if blue_input == null or str(blue_input.get_meta("source_path", "")).get_file() != "panel_blue_input.svg":
-		_fail("海蓝主题输入框没有使用纹理底图", 20)
-		return
-	if blue_console == null or str(blue_console.get_meta("source_path", "")).get_file() != "panel_blue_console.svg":
-		_fail("海蓝主题终端框没有使用纹理底图", 21)
-		return
-	var small_style := small_button.get_theme_stylebox("normal") as StyleBoxTexture
-	var option_style := option.get_theme_stylebox("normal") as StyleBoxTexture
-	if small_style == null or small_style.texture_margin_top + small_style.texture_margin_bottom >= small_button.custom_minimum_size.y:
-		_fail("小按钮九宫格上下边距会互相重叠", 25)
-		return
-	if option_style == null or option_style.texture_margin_top + option_style.texture_margin_bottom >= option.custom_minimum_size.y:
-		_fail("下拉框九宫格上下边距会互相重叠", 26)
-		return
-	if blue_input.texture_margin_top + blue_input.texture_margin_bottom >= input.custom_minimum_size.y:
-		_fail("输入框九宫格上下边距会互相重叠", 27)
-		return
-	if label.get_theme_font_size("font_size") <= 13:
-		_fail("主题字号倍率没有生效", 5)
-		return
-	var result: Dictionary = service.set_theme("midnight")
-	if not bool(result.get("ok", false)):
-		_fail("无法切换夜海黑主题", 6)
-		return
-	ui.apply_theme(result.get("theme", {}))
-	if ui.theme_id() != "midnight":
-		_fail("UiFactory 没有切换到夜海黑主题", 7)
-		return
-	var dark_text := label.get_theme_color("font_color")
-	var dark_input := input.get_theme_stylebox("normal") as StyleBoxTexture
-	var dark_panel := panel.get_theme_stylebox("panel") as StyleBoxTexture
-	var dynamic_dark_panel := dynamic_panel.get_theme_stylebox("panel") as StyleBoxTexture
-	if dynamic_label.get_theme_color("font_color") != ui.text_color:
-		_fail("UiFactory 内部动态语义文字没有随主题更新", 18)
-		return
-	if dark_panel == null or str(dark_panel.get_meta("source_path", "")).get_file() != "panel_dark_surface.svg":
-		_fail("夜海黑主卡片没有切换纹理底图", 22)
-		return
-	if dynamic_dark_panel == null or str(dynamic_dark_panel.get_meta("source_path", "")).get_file() != "panel_dark_surface.svg":
-		_fail("动态语义卡片没有随主题切换纹理", 23)
-		return
-	if dark_text.get_luminance() <= ui.surface_color.get_luminance():
-		_fail("深色主题文字对比度不足", 8)
-		return
-	if ui.color("input").get_luminance() >= 0.25 or dark_input == null or str(dark_input.get_meta("source_path", "")).get_file() != "panel_dark_input.svg":
-		_fail("夜海黑输入框背景或纹理不正确", 9)
-		return
-	var dark_console := console.get_theme_stylebox("normal") as StyleBoxTexture
-	if dark_console == null or str(dark_console.get_meta("source_path", "")).get_file() != "panel_dark_console.svg":
-		_fail("夜海黑终端框没有切换纹理底图", 24)
-		return
-	if console.get_theme_color("default_color") != ui.console_text_color:
-		_fail("终端输出文字没有随主题更新", 10)
-		return
-	var dark_style: StyleBox = button.get_theme_stylebox("normal")
-	if not dark_style is StyleBoxTexture:
-		_fail("深色主题按钮丢失图片底图", 11)
-		return
-	var dark_texture := dark_style as StyleBoxTexture
-	if dark_texture.texture == null or str(dark_texture.get_meta("source_path", "")).get_file() != "button_dark_normal.svg":
-		_fail("夜海黑没有切换到深色按钮底图", 12)
-		return
+	ui.apply_console_theme(console)
+	var toggle := CheckButton.new()
+	ui.apply_crystal_toggle_theme(toggle)
+	var background := ColorRect.new()
+	ui.apply_background_theme(background)
+	for id in ["midnight", "blue_healing", "qq_warm", "midnight"]:
+		service.set_theme(id)
+		ui.apply_theme(service.snapshot())
+		assert(ui.theme_id() == id)
+		for box in [panel.get_theme_stylebox("panel"), dynamic_panel.get_theme_stylebox("panel"), button.get_theme_stylebox("normal"), option.get_theme_stylebox("normal"), input.get_theme_stylebox("normal"), console.get_theme_stylebox("normal")]:
+			assert(box is StyleBoxFlat and box.shadow_size == 0, "Redesigned themes must not restore water textures or shadows")
+		assert(label.get_theme_color("font_color") == ui.text_color, "Legacy labels retain semantic colors across theme changes")
+		assert(label.get_theme_constant("shadow_offset_y") == 1 and label.get_theme_constant("outline_size") == 1, "Text depth stays subtle and consistent after theme changes")
+		assert(ui.axolotl_texture().resource_path == "res://assets/ui/axolotl_mark.svg", "Mascot artwork never depends on the theme")
+		assert(panel.get_theme_stylebox("panel").bg_color == ui.surface_color)
+		assert(dynamic_panel.get_theme_stylebox("panel").bg_color == ui.surface_color)
+		assert(input.get_theme_stylebox("normal").bg_color == ui.color("input"))
+		assert(console.get_theme_color("default_color") == ui.console_text_color)
+		for state in ["font_color", "font_pressed_color", "font_hover_color", "font_focus_color"]:
+			assert(primary.get_theme_color(state) == ui.color("primary_text"), "Primary actions need readable text in every interaction state")
+		var primary_luminance := ui.color("primary_text").srgb_to_linear().get_luminance()
+		var accent_luminance: float = ui.green_color.srgb_to_linear().get_luminance()
+		assert((maxf(primary_luminance, accent_luminance) + 0.05) / (minf(primary_luminance, accent_luminance) + 0.05) > 4.5, "Primary actions need at least 4.5:1 contrast")
+		if id == "qq_warm":
+			assert(background.material == null, "Switching to a solid theme clears the gradient")
+		else:
+			assert(background.material is ShaderMaterial and not background.is_processing(), "Gradient background stays static")
+			var corners: Array = service.snapshot().background_gradient
+			assert(background.material.get_shader_parameter("top_left") == Color(corners[0]))
+			assert(background.material.get_shader_parameter("bottom_right") == Color(corners[3]))
+			assert(toggle.has_theme_icon_override("checked") and toggle.has_theme_icon_override("unchecked"))
+			for corner in corners:
+				var base := Color(corner).blend(ui.surface_color)
+				var luminances := [base.srgb_to_linear().get_luminance(), ui.text_color.srgb_to_linear().get_luminance()]
+				var contrast := (maxf(luminances[0], luminances[1]) + 0.05) / (minf(luminances[0], luminances[1]) + 0.05)
+				assert(contrast > 7.0, "%s %s main text contrast %.2f must exceed 7:1" % [id, corner, contrast])
 	var second = ThemeServiceScript.new()
 	root.add_child(second)
 	second.initialize()
-	if second.current_theme_id() != "midnight":
-		_fail("主题选择没有持久化", 13)
-		return
-	var back: Dictionary = second.set_theme("blue_healing")
-	if not bool(back.get("ok", false)):
-		_fail("无法切回海蓝治愈主题", 14)
-		return
-	ui.apply_theme(back.get("theme", {}))
-	var restored_style: StyleBox = button.get_theme_stylebox("normal")
-	if not restored_style is StyleBoxTexture:
-		_fail("切回海蓝后按钮纹理丢失", 15)
-		return
-	var restored_texture := restored_style as StyleBoxTexture
-	if restored_texture.texture == null or str(restored_texture.get_meta("source_path", "")).get_file() != "button_blue_normal.svg":
-		_fail("切回海蓝后按钮底图没有恢复", 16)
-		return
-	if label.get_theme_color("font_color") != ui.text_color:
-		_fail("切回海蓝后文字颜色没有恢复", 17)
-		return
-	for node in [label, panel, dynamic_panel, dynamic_label, button, small_button, option, input, console]:
-		if is_instance_valid(node):
-			node.free()
+	assert(second.current_theme_id() == "midnight", "Existing theme identifiers remain persistent")
+	for node in [label, panel, dynamic_panel, button, primary, option, input, console, toggle, background]:
+		node.free()
 	service.free()
 	second.free()
-	print("PASS: UI 主题数据、图片按钮、明暗对比、字号与持久化")
-	call_deferred("_finish")
-
-func _finish() -> void:
+	print("PASS: flat QQ themes, static gradients, semantic colors, contrast, primary states and persistence")
 	quit(0)
-
-func _fail(message: String, code: int) -> void:
-	printerr("FAIL: %s" % message)
-	quit(code)

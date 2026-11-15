@@ -7,12 +7,17 @@ class FakeService:
 	signal theme_changed(snapshot: Dictionary)
 	var current := "blue_healing"
 	var calls: Array[String] = []
+	var font_percent := 100
+	func set_font_size_percent(percent: int) -> Dictionary:
+		font_percent = percent
+		theme_changed.emit(snapshot())
+		return {"ok": true}
 	func catalog() -> Array:
 		return [{"id":"blue_healing","name":"海蓝治愈"},{"id":"midnight","name":"夜海黑"}]
 	func current_theme_id() -> String:
 		return current
 	func snapshot() -> Dictionary:
-		return {"id": current, "name": "夜海黑" if current == "midnight" else "海蓝治愈", "colors": {}, "button_textures": {}}
+		return {"id": current, "name": "夜海黑" if current == "midnight" else "海蓝治愈", "colors": {}, "button_textures": {}, "font_size_percent": font_percent}
 	func set_theme(theme_id: String) -> Dictionary:
 		calls.append(theme_id)
 		current = theme_id
@@ -26,6 +31,8 @@ class FakeFactory:
 		applied.append(str(snapshot.get("id", "")))
 class FakePanel:
 	signal ui_theme_requested(theme_id: String)
+	signal font_size_requested(percent: int)
+	signal font_size_adjustment_finished
 	var catalogs := 0
 	var states: Array[String] = []
 	var messages: Array[String] = []
@@ -57,7 +64,13 @@ func _run() -> void:
 	if panel.states.back() != "midnight" or panel.messages.is_empty():
 		_fail("主题切换后没有回写设置页状态", 4)
 		return
+	panel.font_size_requested.emit(150)
+	panel.font_size_requested.emit(175)
+	await create_timer(0.12).timeout
+	assert(service.font_percent == 175 and ui.font_size_percent == 175, "Rapid slider changes apply the latest value")
+	panel.font_size_requested.emit(200)
 	coordinator.shutdown()
+	assert(service.font_percent == 200, "Shutdown saves a pending slider value")
 	panel.ui_theme_requested.emit("blue_healing")
 	if service.calls.size() != 1 or ui.theme_id() != "midnight":
 		_fail("协调器关闭后仍响应主题意图", 5)

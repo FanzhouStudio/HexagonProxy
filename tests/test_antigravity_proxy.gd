@@ -95,6 +95,39 @@ func _run() -> void:
 	check(panel.selected_account() == "default" and previous_id != "default", "switching refreshes selected account state")
 	await coordinator._poll_login()
 	check(coordinator._login_timer.is_stopped(), "automatic login recognition stops polling once identified")
+	var remove_buttons: Array[Button] = []
+	for button in panel.account_buttons:
+		if button.get_meta("account_action", "") == "remove":
+			remove_buttons.append(button)
+	check(remove_buttons.size() == 1 and str(remove_buttons[0].get_meta("account_id")) == previous_id, "Only a saved custom account offers deletion")
+	remove_buttons[0].pressed.emit()
+	var prompt := panel._prompt_host.get_node_or_null("AntigravityDeletePrompt")
+	check(is_instance_valid(prompt) and service.accounts.exists(previous_id), "Deletion opens a confirmation and leaves the account intact")
+	var cancel: Button = prompt.find_children("*", "Button", true, false).filter(func(button: Button) -> bool: return button.text == "取消")[0]
+	cancel.pressed.emit()
+	await process_frame
+	check(service.accounts.exists(previous_id), "Cancelling deletion keeps the account")
+	# Delete the most recently opened account with an active login-recognition timer.
+	await coordinator._account_action("launch", previous_id)
+	service.accounts.quotas[previous_id] = {"ok": true, "models": []}
+	panel.render(service.view_state())
+	panel.set_busy(true)
+	for button in panel.account_buttons:
+		check(button.disabled, "All account buttons, including deletion, are disabled while busy")
+	panel._request_remove(previous_id, "工作号")
+	check(panel._prompt_host.get_node_or_null("AntigravityDeletePrompt") == null, "Busy state cannot open a delete prompt")
+	panel.set_busy(false)
+	for button in panel.account_buttons:
+		if button.get_meta("account_action", "") == "remove":
+			button.pressed.emit()
+	prompt = panel._prompt_host.get_node_or_null("AntigravityDeletePrompt")
+	var confirm: Button = prompt.find_children("*", "Button", true, false).filter(func(button: Button) -> bool: return button.text == "删除入口")[0]
+	confirm.pressed.emit()
+	await process_frame
+	check(not service.accounts.exists(previous_id) and not service.accounts.quotas.has(previous_id), "Confirmation removes the account and quota cache")
+	check(panel.account_list.get_child_count() == 1 and panel.selected_account() == "default", "Deleting the selected entry refreshes the list and default selection")
+	check(coordinator._pending_login_id.is_empty() and coordinator._login_timer.is_stopped(), "Deleted accounts stop automatic login polling")
+	check(panel.quota_heading.text == "额度详情" and panel.quota_view.text.contains("额度未知"), "Deleted account quota details are cleared")
 	panel.show_quota({"ok": true, "models": [{"name": "Fixture", "remaining": 0, "reset": "2030-01-01T00:00:00Z"}], "checked_at": "fixture"})
 	check(panel.quota_view.text.contains("剩余 0%"), "zero quota is displayed as a real exhausted balance")
 	panel.show_quota({"ok": false, "message": "接口未返回额度"})

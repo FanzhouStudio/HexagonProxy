@@ -6,6 +6,9 @@ signal action_requested(action: String)
 signal refresh_requested
 signal account_add_requested(account_name: String)
 signal account_action_requested(action: String, id: String)
+signal account_remove_requested(id: String)
+
+const ConfirmationPromptScript = preload("res://scripts/ui/confirmation_prompt.gd")
 
 var ui: UiFactory
 var status_label: Label
@@ -28,9 +31,11 @@ var account_message: Label
 var account_list: VBoxContainer
 var account_buttons: Array[Button] = []
 var _selected_account := "default"
+var _prompt_host: Control
 
-func setup(factory: UiFactory) -> void:
+func setup(factory: UiFactory, prompt_host: Control = null) -> void:
 	ui = factory
+	_prompt_host = prompt_host
 
 func build() -> Control:
 	var page := VBoxContainer.new()
@@ -107,6 +112,8 @@ func build() -> Control:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(page)
+	if not is_instance_valid(_prompt_host):
+		_prompt_host = scroll
 	return scroll
 
 func _build_accounts(column: VBoxContainer) -> void:
@@ -191,6 +198,14 @@ func _build_account_rows(state: Dictionary) -> void:
 		refresh.pressed.connect(func() -> void: account_action_requested.emit("quota", id))
 		actions.add_child(refresh)
 		account_buttons.append(refresh)
+		if id != "default":
+			var remove_button := ui.small_choice_button("删除", ui.danger_color)
+			remove_button.tooltip_text = "删除账号入口，保留本地登录备份、项目和对话"
+			remove_button.set_meta("account_id", id)
+			remove_button.set_meta("account_action", "remove")
+			remove_button.pressed.connect(func() -> void: _request_remove(id, str(item.get("name", "账号"))))
+			actions.add_child(remove_button)
+			account_buttons.append(remove_button)
 		var snapshot: Dictionary = state.get("quota_snapshots", {}).get(id, {})
 		if not snapshot.is_empty():
 			var summaries := PackedStringArray()
@@ -200,7 +215,25 @@ func _build_account_rows(state: Dictionary) -> void:
 			quota.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			row.add_child(quota)
 
+func _request_remove(id: String, account_title: String) -> void:
+	if _busy or id == "default" or not is_instance_valid(_prompt_host):
+		return
+	var existing := _prompt_host.get_node_or_null("AntigravityDeletePrompt")
+	if is_instance_valid(existing):
+		return
+	var prompt = ConfirmationPromptScript.new()
+	prompt.name = "AntigravityDeletePrompt"
+	_prompt_host.add_child(prompt)
+	prompt.setup(ui, "删除“%s”的账号入口？" % account_title,
+		"将从 HexagonProxy 列表移除此账号和额度缓存。保留本地登录数据及备份，不删除共享项目、工作区和对话，也不会关闭正在运行的 Antigravity 窗口。",
+		"删除入口", true)
+	prompt.confirmed.connect(func() -> void:
+		if not _busy:
+			account_remove_requested.emit(id)
+	)
+
 func _show_cached_quota() -> void:
+	quota_heading.text = "额度详情"
 	var snapshot: Dictionary = _state.get("quota_snapshots", {}).get(selected_account(), {})
 	if snapshot.is_empty():
 		quota_view.text = "额度未知，打开并登录此配置后点击刷新。"

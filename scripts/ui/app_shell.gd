@@ -28,6 +28,7 @@ var settings_panel: SettingsPanel
 var page_host: Control
 var pages := {}
 var nav_buttons := {}
+var rail_buttons := {}
 var window_action_buttons := {}
 var page_title: Label
 var aquarium_background: Control
@@ -119,7 +120,7 @@ func build(profile_name: String) -> void:
 	pages["codex"] = codex_accounts_panel.build()
 	antigravity_proxy_panel = AntigravityProxyPanelScript.new()
 	add_child(antigravity_proxy_panel)
-	antigravity_proxy_panel.setup(ui)
+	antigravity_proxy_panel.setup(ui, host)
 	pages["antigravity"] = antigravity_proxy_panel.build()
 	pages["settings"] = settings_panel.build()
 	for page in pages.values():
@@ -148,6 +149,8 @@ func show_page(page_id: String) -> void:
 		var active: bool = str(nav_name) == page_id
 		var button: Button = nav_buttons[nav_name]
 		ui.apply_nav_button(button, active)
+	for page_name in rail_buttons:
+		ui.apply_rail_button(rail_buttons[page_name], str(page_name) == page_id)
 	if is_instance_valid(page_title):
 		page_title.text = titles.get(page_id, "HexagonProxy")
 	nodes_panel.set_active(page_id == "nodes")
@@ -221,7 +224,7 @@ func _add_nav(parent: Container, page_name: String, text: String) -> void:
 	nav_buttons[page_name] = button
 
 func _build_rail(parent: Container) -> void:
-	var rail := ui.panel(ui.console_bg_color, ui.console_bg_color, 0)
+	var rail := ui.panel(ui.color("rail", ui.console_bg_color), Color.TRANSPARENT, 0)
 	rail.custom_minimum_size.x = 64
 	parent.add_child(rail)
 	var column := VBoxContainer.new()
@@ -230,14 +233,17 @@ func _build_rail(parent: Container) -> void:
 	for item in [["⌂", "dashboard", "总览"], ["⬡", "nodes", "节点"], ["◈", "codex", "Codex 账号"], ["↗", "antigravity", "Antigravity"]]:
 		var button := ui.small_choice_button(item[0])
 		button.custom_minimum_size = Vector2(40, 44)
-		button.add_theme_font_size_override("font_size", 22)
+		ui.apply_rail_button(button, false)
 		button.tooltip_text = item[2]
 		button.pressed.connect(func() -> void: show_page(item[1]))
 		column.add_child(button)
+		rail_buttons[item[1]] = button
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(spacer)
 	var settings := ui.small_choice_button("⚙")
 	settings.tooltip_text = "偏好设置"
+	ui.apply_rail_button(settings, false)
 	settings.pressed.connect(func() -> void: show_page("settings"))
 	column.add_child(settings)
+	rail_buttons["settings"] = settings

@@ -19,7 +19,7 @@ func _run() -> void:
 	ui.primary_button(button)
 	ui.apply_theme(service.snapshot())
 	assert(button.get_theme_stylebox("normal").bg_color == ui.green_color)
-	assert(button.get_theme_color("font_color") == ui.console_bg_color)
+	assert(button.get_theme_color("font_color") == ui.color("primary_text"))
 	var label: Label = ui.label("正文", 11, ui.text_color)
 	assert(label.get_theme_font_size("font_size") >= 15)
 	assert(ui.text_color.get_luminance() > ui.surface_color.get_luminance() * 3)

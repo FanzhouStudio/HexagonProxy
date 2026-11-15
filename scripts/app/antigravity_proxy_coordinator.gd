@@ -19,6 +19,18 @@ func setup(proxy_service, proxy_panel: AntigravityProxyPanel, mihomo_control) ->
 	panel.refresh_requested.connect(_refresh)
 	panel.account_add_requested.connect(_add_account)
 	panel.account_action_requested.connect(_account_action)
+	panel.account_remove_requested.connect(_remove_account)
+
+func _remove_account(id: String) -> void:
+	if not _active or _working:
+		return
+	var result: Dictionary = service.accounts.remove_account(id)
+	if result.get("ok", false) and _pending_login_id == id:
+		_login_timer.stop()
+		_pending_login_id = ""
+		_login_checks = 0
+	panel.render(service.view_state())
+	panel.show_account_message(str(result.get("message", "")), result.get("ok", false))
 
 func _add_account(account_name: String) -> void:
 	if not _active or _working:
