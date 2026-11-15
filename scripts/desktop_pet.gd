@@ -17,6 +17,8 @@ var delay_label: Label
 var latency_bar: ProgressBar
 var _pet_base_y := 58.0
 var _animation_time := 0.0
+var _animation_elapsed := 0.0
+var _status_signature := ""
 
 func create_pet(initial_position: Vector2i, initially_visible: bool) -> void:
 	if is_instance_valid(pet_window):
@@ -46,6 +48,7 @@ func set_pet_visible(value: bool) -> void:
 	if not is_instance_valid(pet_window):
 		return
 	pet_window.visible = value
+	set_process(value)
 	if value:
 		pet_window.position = _clamp_to_screen(pet_window.position)
 
@@ -58,6 +61,10 @@ func get_pet_position() -> Vector2i:
 func set_node_status(node_name: String, delay_ms: int, online: bool) -> void:
 	if not is_instance_valid(node_label):
 		return
+	var signature := "%s|%d|%s" % [node_name, delay_ms, online]
+	if signature == _status_signature:
+		return
+	_status_signature = signature
 	if not online:
 		node_label.text = "六角恐龙正在休息"
 		node_label.tooltip_text = ""
@@ -165,6 +172,10 @@ func _process(delta: float) -> void:
 	if not is_pet_visible() or not is_instance_valid(pet_texture):
 		return
 	_animation_time += delta
+	_animation_elapsed += delta
+	if _animation_elapsed < 1.0 / 30.0:
+		return
+	_animation_elapsed = 0.0
 	pet_texture.position.y = _pet_base_y + sin(_animation_time * 2.4) * 3.0
 
 func _set_bar_color(color: Color) -> void:

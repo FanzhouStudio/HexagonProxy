@@ -56,10 +56,15 @@ func _on_poll_timer() -> void:
 	_refresh_tick += 1
 	if mihomo_control.online:
 		if _refresh_tick % 2 == 0:
-			mihomo_control.refresh_runtime()
+			var window := get_window()
+			var visible := DisplayServer.get_name() == "headless" or (window.visible and window.mode != Window.MODE_MINIMIZED)
+			var connections: bool = visible and dashboard_panel.is_dashboard_active()
+			var metadata: bool = (visible and nodes_panel.is_active()) or _refresh_tick % 10 == 0
+			if connections or metadata:
+				mihomo_control.refresh_runtime(connections, metadata)
 		if _refresh_tick % 5 == 0:
 			mihomo_control.poll_status()
-		if _refresh_tick % 10 == 0:
+		if _refresh_tick % 10 == 0 and nodes_panel.is_active():
 			var group: Dictionary = nodes_panel.selected_group()
 			if not group.is_empty():
 				mihomo_control.test_group_delay(str(group.get("name", "")))

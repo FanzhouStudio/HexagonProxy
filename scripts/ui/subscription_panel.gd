@@ -192,6 +192,12 @@ func _subscription_row(entry: Dictionary, active: bool) -> PanelContainer:
 	if active:
 		detail += " · 当前使用"
 	words.add_child(ui.label(detail, 10, GREEN if active else MUTED))
+	var expiry := ui.label(_expiry_text(entry), 11, MUTED)
+	var expires := int(entry.get("expires_at", -1))
+	if expires > 0 and expires <= int(Time.get_unix_time_from_system()) + 7 * 86400:
+		expiry.add_theme_color_override("font_color", ui.danger_color)
+	expiry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	words.add_child(expiry)
 	var entry_id := str(entry.get("id", ""))
 	var use_button := ui.small_choice_button("使用中" if active else "切换")
 	use_button.disabled = active
@@ -202,6 +208,20 @@ func _subscription_row(entry: Dictionary, active: bool) -> PanelContainer:
 	delete_button.pressed.connect(func() -> void: _confirm_delete_subscription(entry_id, display_name))
 	row.add_child(delete_button)
 	return row_card
+
+func _expiry_text(entry: Dictionary) -> String:
+	if entry.get("type", "") != "http":
+		return "到期日期：不适用（本地配置 / 分享链接）"
+	if not entry.get("expiry_checked", false):
+		return "到期日期：待获取（启用订阅并连接后自动查询）"
+	var expires := int(entry.get("expires_at", -1))
+	if expires <= 0:
+		return "到期日期：订阅服务未提供"
+	var local_time := expires + int(Time.get_time_zone_from_system()["bias"]) * 60
+	var date := Time.get_datetime_string_from_unix_time(local_time).replace("T", " ")
+	var remaining := expires - int(Time.get_unix_time_from_system())
+	var status := "已到期" if remaining <= 0 else "剩余 %d 天" % int(ceil(remaining / 86400.0))
+	return "到期：%s（本地） · %s" % [date, status]
 
 func _confirm_delete_subscription(entry_id: String, display_name: String) -> void:
 	var prompt = ConfirmationPromptScript.new()

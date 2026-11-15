@@ -12,10 +12,12 @@ var settings_panel
 var resident
 var window_mode_controller
 var _active := false
+var _update_stopped_core := false
 
 func setup(control, core_update, autostart, config, settings, resident_controller, window_controller = null) -> void:
 	mihomo_control = control
 	core_update_service = core_update
+	core_update_service.before_install = _prepare_core_install
 	autostart_service = autostart
 	proxy_config = config
 	settings_panel = settings
@@ -36,6 +38,7 @@ func start() -> void:
 	_active = true
 func shutdown() -> void:
 	_active = false
+	core_update_service.cancel()
 
 func _on_ports_apply_requested(mixed_port: int, controller_port: int) -> void:
 	if not _active:
@@ -76,31 +79,48 @@ func _on_port_random_requested(kind: String) -> void:
 		settings_panel.show_port_message(str(result.get("message", "随机端口保存失败。")), false)
 
 func _ports_locked() -> bool:
-	return bool(mihomo_control.online) or bool(mihomo_control.starting) or int(mihomo_control.core_pid) > 0
+	return core_update_service.is_busy() or bool(mihomo_control.online) or bool(mihomo_control.starting) or int(mihomo_control.core_pid) > 0
 
 func _restore_port_controls(message: String) -> void:
 	settings_panel.set_port_values(proxy_config.mixed_port(), proxy_config.controller_port())
 	settings_panel.show_port_message(message, false)
 
 func _on_core_restart_requested() -> void:
-	if _active:
+	if _active and not core_update_service.is_busy():
 		mihomo_control.restart()
 
 func _on_core_update_requested() -> void:
 	if not _active or core_update_service.is_busy():
 		return
-	if mihomo_control.online or mihomo_control.starting or mihomo_control.core_pid > 0:
-		settings_panel.show_core_update_blocked("请先断开代理，再更新 Mihomo 内核")
+	if mihomo_control.starting:
+		settings_panel.show_core_update_blocked("请等待内核启动完成后再更新")
 		return
+	_update_stopped_core = false
+	core_update_service.download_proxy_port = proxy_config.mixed_port() if mihomo_control.online else 0
 	core_update_service.download_latest()
+
+func _prepare_core_install() -> bool:
+	if not _active:
+		return false
+	var old_pid := int(mihomo_control.core_pid)
+	_update_stopped_core = old_pid > 0 or mihomo_control.online
+	if _update_stopped_core:
+		mihomo_control.stop()
+	var deadline := Time.get_ticks_msec() + 5000
+	while old_pid > 0 and OS.is_process_running(old_pid):
+		if not _active or Time.get_ticks_msec() >= deadline:
+			return false
+		await get_tree().create_timer(0.1).timeout
+	return _active
 
 func _on_core_update_progress_changed(progress: float, message: String) -> void:
 	if _active:
 		settings_panel.set_core_update_progress(progress, message)
 
 func _on_core_update_finished(success: bool, _message: String) -> void:
-	if success and _active:
+	if (success or _update_stopped_core) and _active:
 		mihomo_control.start()
+	_update_stopped_core = false
 
 func _on_autostart_requested(enabled: bool) -> void:
 	if _active:

@@ -3,6 +3,8 @@ extends Control
 
 var samples: Array[float] = []
 var accent := Color("16866f")
+var background := Color("403d37")
+var grid := Color("605c54")
 
 func push_sample(value: float) -> void:
 	samples.append(maxf(value, 0.0))
@@ -12,10 +14,10 @@ func push_sample(value: float) -> void:
 
 func _draw() -> void:
 	var bounds := Rect2(Vector2.ZERO, size)
-	draw_style_box(_box(Color("f5ffffc9"), Color("b8ecebea"), 18), bounds)
+	draw_style_box(_box(background, background, 6), bounds)
 	for index in range(1, 4):
 		var y := size.y * float(index) / 4.0
-		draw_line(Vector2(16, y), Vector2(size.x - 16, y), Color("3e7c8b32"), 1.0)
+		draw_line(Vector2(16, y), Vector2(size.x - 16, y), grid, 1.0)
 	if samples.size() < 2:
 		return
 	var peak: float = maxf(samples.max(), 1.0)

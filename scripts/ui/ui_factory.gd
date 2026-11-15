@@ -29,6 +29,7 @@ var _tracked_toggles: Array = []
 var _tracked_options: Array = []
 var _tracked_inputs: Array = []
 var _tracked_backgrounds: Array[CanvasItem] = []
+var _created_since_prune := 0
 
 func _init(theme_or_text: Variant = {}, muted := Color("527384"), green := Color("16866f"), green_dark := Color("c5f1dfde"), border := Color("a8e8e8e8"), surface := Color("e9fbfbd4"), surface_2 := Color("d8f4f3dc"), crystal := Color("f7ffffdf")) -> void:
 	if theme_or_text is Dictionary:
@@ -71,6 +72,8 @@ func style(fill: Color, border: Color, radius: int, width: int) -> StyleBoxFlat:
 	result.border_color = _resolve_color(border)
 	result.set_border_width_all(width)
 	result.set_corner_radius_all(radius)
+	if bool(_theme.get("flat", false)):
+		result.set_corner_radius_all(mini(radius, 7))
 	result.content_margin_left = 10
 	result.content_margin_right = 10
 	result.content_margin_top = 8
@@ -78,16 +81,21 @@ func style(fill: Color, border: Color, radius: int, width: int) -> StyleBoxFlat:
 	result.shadow_color = Color("17394a35") if theme_id() == "blue_healing" else Color("00000055")
 	result.shadow_size = 8
 	result.shadow_offset = Vector2(0, 3)
+	if bool(_theme.get("flat", false)):
+		result.shadow_size = 0
 	result.anti_aliasing = true
 	return result
 
 func panel(fill: Color, border: Color, radius: int) -> PanelContainer:
 	var result := PanelContainer.new()
 	result.add_theme_stylebox_override("panel", _panel_style(fill, border, radius))
-	_tracked_panels.append({
+	var entry := {
 		"node": result, "fill": fill, "border": border, "radius": radius,
 		"fill_role": _semantic_role(fill), "border_role": _semantic_role(border)
-	})
+	}
+	result.set_meta("ui_panel_entry", entry)
+	_tracked_panels.append(entry)
+	_track_creation()
 	return result
 
 func apply_background_theme(item: CanvasItem) -> void:
@@ -98,24 +106,26 @@ func apply_background_theme(item: CanvasItem) -> void:
 func update_panel_style(panel: PanelContainer, fill: Color, border: Color, radius := 16) -> void:
 	if not is_instance_valid(panel):
 		return
-	for entry in _tracked_panels:
-		if entry.get("node") == panel:
-			entry["fill"] = fill
-			entry["border"] = border
-			entry["radius"] = radius
-			entry["fill_role"] = _semantic_role(fill)
-			entry["border_role"] = _semantic_role(border)
-			break
+	var entry: Dictionary = panel.get_meta("ui_panel_entry", {})
+	if not entry.is_empty():
+		if entry.fill == fill and entry.border == border and entry.radius == radius:
+			return
+		entry["fill"] = fill
+		entry["border"] = border
+		entry["radius"] = radius
+		entry["fill_role"] = _semantic_role(fill)
+		entry["border_role"] = _semantic_role(border)
 	panel.add_theme_stylebox_override("panel", _panel_style(_resolve_color(fill), _resolve_color(border), radius))
 
 func update_label_color(label_node: Label, color_value: Color) -> void:
 	if not is_instance_valid(label_node):
 		return
-	for entry in _tracked_labels:
-		if entry.get("node") == label_node:
-			entry["color"] = color_value
-			entry["role"] = _semantic_role(color_value)
-			break
+	var entry: Dictionary = label_node.get_meta("ui_label_entry", {})
+	if not entry.is_empty():
+		if entry.color == color_value:
+			return
+		entry["color"] = color_value
+		entry["role"] = _semantic_role(color_value)
 	label_node.add_theme_color_override("font_color", _resolve_color(color_value))
 
 func margin(left: int, top: int, right: int, bottom: int) -> MarginContainer:
@@ -131,7 +141,11 @@ func label(text: String, font_size: int, color_value: Color) -> Label:
 	result.text = text
 	result.add_theme_font_size_override("font_size", _scaled_font(font_size))
 	result.add_theme_color_override("font_color", _resolve_color(color_value))
-	_tracked_labels.append({"node": result, "size": font_size, "color": color_value, "role": _semantic_role(color_value)})
+	result.add_theme_color_override("font_disabled_color", muted_color.darkened(0.25))
+	var entry := {"node": result, "size": font_size, "color": color_value, "role": _semantic_role(color_value)}
+	result.set_meta("ui_label_entry", entry)
+	_tracked_labels.append(entry)
+	_track_creation()
 	return result
 
 func button(text: String, _fill: Color, color_value: Color) -> Button:
@@ -145,10 +159,11 @@ func button(text: String, _fill: Color, color_value: Color) -> Button:
 	result.add_theme_color_override("font_focus_color", text_color)
 	_apply_button_textures(result, false)
 	_tracked_buttons.append({"node": result, "small": false, "color": color_value, "role": _semantic_role(color_value)})
+	_track_creation()
 	return result
 
 func small_choice_button(text: String, color_value: Color = Color.TRANSPARENT) -> Button:
-	var text_color_value := muted_color if color_value.a <= 0.001 else color_value
+	var text_color_value := (text_color if bool(_theme.get("flat", false)) else muted_color) if color_value.a <= 0.001 else color_value
 	var result := button(text, surface_2_color, text_color_value)
 	result.custom_minimum_size = Vector2(64, 38)
 	result.add_theme_font_size_override("font_size", _scaled_font(12))
@@ -162,6 +177,10 @@ func apply_nav_button(button: Button, active: bool) -> void:
 	button.add_theme_font_size_override("font_size", _scaled_font(13))
 	button.add_theme_color_override("font_color", green_color if active else muted_color)
 	button.add_theme_stylebox_override("normal", _texture_style("pressed" if active else "normal", true))
+	if bool(_theme.get("flat", false)):
+		button.add_theme_color_override("font_color", text_color if active else muted_color)
+		button.add_theme_stylebox_override("normal", style(color("nav_active") if active else color("sidebar"), Color.TRANSPARENT, 6, 0))
+		button.add_theme_stylebox_override("hover", style(surface_2_color, Color.TRANSPARENT, 6, 0))
 
 func apply_crystal_toggle_theme(toggle: CheckButton) -> void:
 	toggle.add_theme_font_size_override("font_size", _scaled_font(13))
@@ -183,6 +202,8 @@ func apply_crystal_option_theme(option: OptionButton) -> void:
 	option.add_theme_stylebox_override("hover", _texture_style("hover", false))
 	option.add_theme_stylebox_override("pressed", _texture_style("pressed", false))
 	option.add_theme_stylebox_override("focus", _texture_style("hover", false))
+	option.add_theme_stylebox_override("disabled", _panel_style(surface_2_color, border_color, 6))
+	option.add_theme_color_override("font_disabled_color", muted_color)
 	var popup := option.get_popup()
 	popup.add_theme_color_override("font_color", text_color)
 	popup.add_theme_color_override("font_hover_color", green_color)
@@ -200,6 +221,7 @@ func apply_line_edit_theme(edit: LineEdit, base_size := 12) -> void:
 	edit.add_theme_color_override("font_uneditable_color", muted_color)
 	edit.add_theme_stylebox_override("normal", _panel_style(color("input", crystal_white_color), border_color, 10, true))
 	edit.add_theme_stylebox_override("focus", _panel_style(color("input", crystal_white_color), green_color, 10, true))
+	edit.add_theme_stylebox_override("read_only", _panel_style(surface_2_color, border_color, 7, true))
 	_track_input(edit, "line", base_size)
 
 func apply_text_edit_theme(edit: TextEdit, base_size := 12) -> void:
@@ -259,14 +281,20 @@ func empty_message(text: String) -> Label:
 	result.custom_minimum_size = Vector2(760, 180)
 	return result
 
-func axolotl_texture() -> AtlasTexture:
+func axolotl_texture() -> Texture2D:
+	if bool(_theme.get("flat", false)):
+		return load("res://assets/ui/axolotl_mark.svg")
 	var texture := AtlasTexture.new()
 	texture.atlas = load("res://assets/axolotl.png")
 	texture.region = Rect2(24, 44, 112, 72)
 	return texture
 
 func _scaled_font(base_size: int) -> int:
-	return maxi(base_size + 1, int(round(float(base_size) * font_scale)))
+	return maxi(15 if bool(_theme.get("flat", false)) else base_size + 1, int(round(float(base_size) * font_scale)))
+
+func primary_button(button: Button) -> void:
+	button.set_meta("ui_primary", true)
+	_apply_button_textures(button, bool(button.get_meta("ui_small_button", false)))
 
 func _panel_style(fill: Color, border: Color, radius: int, compact := false) -> StyleBox:
 	var role := _panel_texture_role(_semantic_role(fill))
@@ -299,7 +327,17 @@ func _panel_texture_role(role: String) -> String:
 		"console_bg": return "console"
 	return ""
 
-func _texture_style(state: String, compact := false) -> StyleBoxTexture:
+func _texture_style(state: String, compact := false) -> StyleBox:
+	if bool(_theme.get("flat", false)):
+		var fill := surface_2_color
+		if state == "hover":
+			fill = color("nav_active")
+		elif state == "pressed":
+			fill = green_dark_color
+		var flat := style(fill, border_color, 6, 1)
+		flat.content_margin_left = 14
+		flat.content_margin_right = 14
+		return flat
 	var path := str(_textures.get(state, _textures.get("normal", "")))
 	var box := StyleBoxTexture.new()
 	if not path.is_empty():
@@ -333,6 +371,12 @@ func _apply_button_textures(button: Button, compact: bool) -> void:
 	button.add_theme_stylebox_override("pressed", _texture_style("pressed", compact))
 	button.add_theme_stylebox_override("focus", _texture_style("hover", compact))
 	button.add_theme_stylebox_override("disabled", style(color("disabled", Color("b9cbd1aa")), border_color, 12, 1))
+	button.add_theme_color_override("font_disabled_color", muted_color.darkened(0.2))
+	if bool(_theme.get("flat", false)) and button.get_meta("ui_primary", false):
+		button.add_theme_stylebox_override("normal", style(green_color, green_color, 6, 0))
+		button.add_theme_stylebox_override("hover", style(green_color.lightened(0.1), green_color, 6, 0))
+		button.add_theme_color_override("font_color", console_bg_color)
+		button.add_theme_color_override("font_hover_color", console_bg_color)
 
 func _resolve_color(value: Color) -> Color:
 	if value.a <= 0.001:
@@ -410,6 +454,8 @@ func _retheme_tracked() -> void:
 			node.add_theme_color_override("font_color", button_color)
 			node.add_theme_color_override("font_hover_color", text_color)
 			node.add_theme_color_override("font_pressed_color", text_color)
+			if node.get_meta("ui_primary", false):
+				_apply_button_textures(node, compact)
 	for toggle in _tracked_toggles:
 		if is_instance_valid(toggle):
 			apply_crystal_toggle_theme(toggle)
@@ -441,6 +487,12 @@ func _prune_invalid_tracked() -> void:
 		if is_instance_valid(item):
 			valid_backgrounds.append(item)
 	_tracked_backgrounds = valid_backgrounds
+
+func _track_creation() -> void:
+	_created_since_prune += 1
+	if _created_since_prune >= 512:
+		_created_since_prune = 0
+		_prune_invalid_tracked()
 
 func _track_input(node: Control, kind: String, base_size: int) -> void:
 	for entry in _tracked_inputs:

@@ -5,13 +5,13 @@
 <h1 align="center">HexagonProxy</h1>
 
 <p align="center">
-  一只会守护网络的像素美西螈<br>
+  六角恐龙，守护每一次连接<br>
   面向 Windows 的轻量 Mihomo 图形客户端
 </p>
 
 <p align="center">
   <img alt="Latest Release" src="https://img.shields.io/github/v/release/FanzhouStudio/HexagonProxy?label=Release">
-  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.2.0-16866f">
+  <img alt="Current Version" src="https://img.shields.io/badge/Current-v0.3.0-d4b77b">
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-3478b8">
   <img alt="Godot" src="https://img.shields.io/badge/Godot-4.7-478cbf">
   <img alt="Mihomo" src="https://img.shields.io/badge/Core-Mihomo-16866f">
@@ -24,9 +24,9 @@
   QQ 群：1102815471
 </p>
 
-HexagonProxy 将订阅、节点、系统代理、TUN、应用分流、故障切换、内置终端、Codex 多账号与桌面宠物整合在同一个像素水晶界面中。网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理，客户端负责本地配置、交互与 Windows 集成。
+HexagonProxy 将订阅、节点、系统代理、TUN、应用分流、故障切换、内置终端、Codex / Antigravity 多账号与桌面宠物整合在暖灰简约工作台中。网络协议由独立运行的 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核处理，客户端负责本地配置、交互与 Windows 集成。
 
-> **v0.2.0**：修复 Codex 授权失败、CLI 路径识别和启动卡住问题；支持在 Codex 运行期间独立添加授权账号。详见 [更新日志](RELEASE_NOTES_v0.2.0.md)。
+> **v0.3.0**：全新暖灰界面与六角恐龙启动动画，Antigravity 多账号、共享项目与对话，下载与诊断修复，以及节点刷新性能优化。详见 [更新日志](RELEASE_NOTES_v0.3.0.md)。
 
 ## 下载与首次使用
 
@@ -43,11 +43,7 @@ HexagonProxy 将订阅、节点、系统代理、TUN、应用分流、故障切�
 
 使用 Windows 系统代理时通常不需要管理员权限；使用 TUN 时请以管理员身份运行。当前个人发布版本尚未购买代码签名证书，因此 Windows SmartScreen 或部分安全软件可能显示未知发布者/启发式提示；建议从官方 Releases 下载并核对 SHA256。
 
-当前 v0.2.0 便携版 SHA256：
-
-```text
-2CD28F252BF95EC220C9AD958ADE025B4BB0143A38724F611240F3F6BF4F9B64
-```
+校验值请使用对应 Release 随附的 `SHA256SUMS.txt`，确保与下载的版本一致。
 
 ### 快速开始
 
@@ -146,6 +142,18 @@ HexagonProxy 会同时在 Windows 系统代理层和 Mihomo 规则层保护本�
 账号索引位于 Godot 用户数据目录的 `codex_profiles.json`，备份默认位于 `%USERPROFILE%\.codex-profiles\HexagonProxy\accounts`。切换会中断 Codex 中正在运行的本地任务，界面会在执行前提示。
 
 功能设计参考 [codex-tools](https://github.com/170-carry/codex-tools)，以本项目的 Godot / PowerShell 架构实现。认证格式及文件存储规则参见 [OpenAI 官方认证说明](https://learn.chatgpt.com/docs/auth)。额度服务接口可能发生变化；查询失败会显示原因，不会更改当前登录或伪造额度。
+
+### Antigravity 独立代理
+
+账号页支持“添加账号并登录”和逐行切换，登录独立、项目与对话共享，并显示本地额度查询结果与缓存。旧配置首次迁移前请保存并完整退出对应账号及后台；迁移会保留原目录备份。详见 [账号与共享工作区说明](docs/antigravity_accounts.md)。
+
+- 左侧新增“Antigravity”页面，自动查找当前用户安装的主程序，也可手动选择 `Antigravity.exe` / `Antigravity IDE.exe`。
+- 先在总览连接代理，完整退出 Antigravity，再点击“启用 / 同步端口”；之后使用“通过代理启动”。无需开启 TUN 或 Windows 系统代理。
+- 使用 [yuaotian/antigravity-proxy](https://github.com/yuaotian/antigravity-proxy) v2.4 桌面 x64 组件，将 Antigravity 及匹配的语言服务子进程连接交给本机 SOCKS5 混合端口。保留上游默认的端口与本地地址旁路规则。
+- 随包 DLL 与模板来自同一发布包并固定 SHA-256，启用前再次校验；组件自动更新和第三方下载镜像关闭。
+- 首次启用先备份安装目录里的 `version.dll` 和 `config.json`，再写入代理组件。点击“卸载并恢复”还原原文件；配置记录与原始备份保存在 Godot 用户数据目录的 `runtime/antigravity-proxy/installations`，不要手动删除。
+- 安装中断保留恢复记录；原文件或托管文件被外部修改时会拒绝覆盖。Antigravity 更新移除代理文件后可以重新启用。HexagonProxy 混合端口变化后，退出 Antigravity 再同步；代理启动按钮也会先同步端口。
+- 已启用代理的 Antigravity 需要 HexagonProxy 的混合端口持续监听；退出代理软件前可先卸载组件。当前仅支持 Windows x64。
 
 ### Windows 集成
 

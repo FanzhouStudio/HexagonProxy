@@ -95,7 +95,7 @@ func _build_appearance_card() -> PanelContainer:
 	ui.apply_crystal_option_theme(theme_selector)
 	theme_selector.item_selected.connect(_on_theme_selected)
 	row.add_child(theme_selector)
-	theme_message_label = ui.label("按钮、卡片与输入框使用纹理底图 · 文字自动适配明暗主题", 10, MUTED)
+	theme_message_label = ui.label("统一按钮、输入框与文字配色 · 主题切换后即时生效", 10, MUTED)
 	column.add_child(theme_message_label)
 	return card
 

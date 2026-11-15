@@ -19,6 +19,8 @@ var _poll_in_flight := false
 var _startup_attempts := 0
 var _health_failures := 0
 var _shutting_down := false
+var _provider_delay_pending: Dictionary = {}
+var _provider_delay_retries: Dictionary = {}
 
 func setup(proxy, api) -> void:
 	_disconnect_dependencies()
@@ -48,12 +50,14 @@ func poll_status() -> void:
 	_poll_in_flight = true
 	request("version", "/version", HTTPClient.METHOD_GET)
 
-func refresh_runtime() -> void:
+func refresh_runtime(include_connections := true, include_metadata := true) -> void:
 	if not online:
 		return
-	request("proxies", "/proxies", HTTPClient.METHOD_GET)
-	request("connections", "/connections", HTTPClient.METHOD_GET)
-	request("config", "/configs", HTTPClient.METHOD_GET)
+	if include_metadata:
+		request("proxies", "/proxies", HTTPClient.METHOD_GET)
+		request("config", "/configs", HTTPClient.METHOD_GET)
+	if include_connections:
+		request("connections", "/connections", HTTPClient.METHOD_GET)
 
 func set_mode(mode: String, group_name := "六角选择") -> void:
 	if mode not in ["rule", "global", "direct"]:
@@ -70,6 +74,7 @@ func select_proxy(group_name: String, proxy_name: String, action := "select_prox
 	request(action, "/proxies/%s" % group_name.uri_encode(), HTTPClient.METHOD_PUT, JSON.stringify({"name": proxy_name}))
 
 func test_proxy_delay(proxy_name: String) -> void:
+	_provider_delay_retries.erase(proxy_name)
 	var test_url := "https://www.gstatic.com/generate_204".uri_encode()
 	var path := "/proxies/%s/delay?url=%s&timeout=5000" % [proxy_name.uri_encode(), test_url]
 	request("delay:%s" % proxy_name, path, HTTPClient.METHOD_GET)
@@ -85,6 +90,8 @@ func request(action: String, endpoint: String, method: int, body := "") -> void:
 	if api_service:
 		api_service.request(action, endpoint, method, body)
 func cancel_requests() -> void:
+	_provider_delay_pending.clear()
+	_provider_delay_retries.clear()
 	if api_service:
 		api_service.cancel_all()
 	_poll_in_flight = false
@@ -142,6 +149,19 @@ func _on_start_failed(message: String) -> void:
 	event_logged.emit(message)
 
 func _on_api_result(action: String, ok: bool, payload: Variant) -> void:
+	if action == "resolve_delay_providers":
+		_resolve_provider_delays(ok, payload)
+		return
+	if action.begins_with("delay:"):
+		var name := action.trim_prefix("delay:")
+		if not ok and payload is Dictionary and int(payload.get("_http_status", 0)) == 404 and not _provider_delay_retries.has(name):
+			_provider_delay_pending[name] = true
+			_provider_delay_retries[name] = true
+			request("resolve_delay_providers", "/providers/proxies", HTTPClient.METHOD_GET)
+			return
+		_provider_delay_retries.erase(name)
+		if not ok:
+			event_logged.emit("节点测速失败：%s · %s" % [name, _delay_error(payload)])
 	if action == "version":
 		_poll_in_flight = false
 		if ok:
@@ -182,6 +202,39 @@ func _on_api_result(action: String, ok: bool, payload: Variant) -> void:
 	if action == "update_provider":
 		event_logged.emit("订阅更新%s。" % ("完成" if ok else "失败"))
 	api_result.emit(action, ok, payload)
+
+func _delay_error(payload: Variant) -> String:
+	if payload is Dictionary:
+		match int(payload.get("_http_status", 0)):
+			404: return "节点未在内核中找到，请刷新订阅。"
+			504: return "连接超时，请检查节点服务、UDP 网络和认证参数。"
+		return str(payload.get("message", "测速请求失败"))
+	return "测速请求失败"
+
+func _resolve_provider_delays(ok: bool, payload: Variant) -> void:
+	var pending := _provider_delay_pending.keys()
+	_provider_delay_pending.clear()
+	var providers: Dictionary = payload.get("providers", {}) if ok and payload is Dictionary else {}
+	var provider_names := providers.keys()
+	provider_names.sort()
+	for name: String in pending:
+		var found := ""
+		for provider_name: String in provider_names:
+			var provider: Variant = providers[provider_name]
+			if not provider is Dictionary:
+				continue
+			for node in provider.get("proxies", []):
+				if node is Dictionary and str(node.get("name", "")) == name:
+					found = provider_name
+					break
+			if not found.is_empty():
+				break
+		if found.is_empty():
+			_provider_delay_retries.erase(name)
+			api_result.emit("delay:" + name, false, {"_http_status": 404, "message": "节点未在订阅中找到，请刷新订阅。"} if ok else payload)
+			continue
+		var path := "/providers/proxies/%s/%s/healthcheck?url=%s&timeout=5000" % [found.uri_encode(), name.uri_encode(), "https://www.gstatic.com/generate_204".uri_encode()]
+		request("delay:" + name, path, HTTPClient.METHOD_GET)
 
 func _set_online(value: bool, message: String) -> void:
 	var changed := online != value

@@ -56,7 +56,7 @@ func build(profile_name: String) -> Control:
 	left.add_child(_build_stats_row())
 	left.add_child(_build_graph_card())
 	var right := VBoxContainer.new()
-	right.custom_minimum_size.x = 330
+	right.custom_minimum_size.x = 300
 	right.add_theme_constant_override("separation", 14)
 	hero_row.add_child(right)
 	right.add_child(_build_pet_card(profile_name))
@@ -75,8 +75,8 @@ func _build_connection_card() -> PanelContainer:
 	var words := VBoxContainer.new()
 	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(words)
-	words.add_child(ui.label("网络守护", 13, MUTED))
-	words.add_child(ui.label("让六角恐龙接管网络", 24, TEXT))
+	words.add_child(ui.label("连接状态", 12, MUTED))
+	words.add_child(ui.label("网络连接", 24, TEXT))
 	connect_toggle = CheckButton.new()
 	connect_toggle.text = "一键连接"
 	connect_toggle.add_theme_font_size_override("font_size", 15)
@@ -123,6 +123,9 @@ func _build_graph_card() -> PanelContainer:
 	row.add_child(title)
 	row.add_child(ui.label("最近 44 秒", 11, MUTED))
 	traffic_graph = TrafficGraphScript.new()
+	traffic_graph.accent = ui.green_color
+	traffic_graph.background = ui.crystal_white_color
+	traffic_graph.grid = ui.border_color
 	traffic_graph.custom_minimum_size.y = 116
 	traffic_graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(traffic_graph)
@@ -130,31 +133,31 @@ func _build_graph_card() -> PanelContainer:
 
 func _build_pet_card(profile_name: String) -> PanelContainer:
 	var card := ui.panel(Color("ecfbf5dc"), Color("b4eee1ef"), 22)
-	card.custom_minimum_size.y = 350
+	card.custom_minimum_size.y = 250
 	var column := VBoxContainer.new()
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.add_theme_constant_override("separation", 10)
 	var content_margin := ui.margin(20, 14, 20, 16)
 	card.add_child(content_margin)
 	content_margin.add_child(column)
-	var screen := ui.panel(Color("c7d79d"), Color("6b7954"), 18)
-	screen.custom_minimum_size = Vector2(0, 225)
+	var screen := ui.panel(ui.surface_2_color, ui.border_color, 8)
+	screen.custom_minimum_size = Vector2(0, 140)
 	column.add_child(screen)
 	var screen_content := Control.new()
 	screen_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen.add_child(screen_content)
 	var scan := ColorRect.new()
-	scan.color = Color("b8cb8e")
+	scan.color = ui.surface_2_color
 	scan.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 10)
 	screen_content.add_child(scan)
 	pet_texture = TextureRect.new()
 	pet_texture.texture = ui.axolotl_texture()
 	pet_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	pet_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	pet_texture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pet_texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	pet_texture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 24)
 	screen_content.add_child(pet_texture)
-	pet_speech = ui.label("等待出发！", 14, Color("253325"))
+	pet_speech = ui.label("等待连接", 12, TEXT)
 	pet_speech.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pet_speech.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	pet_speech.offset_top = 10
@@ -189,6 +192,7 @@ func set_status(online: bool, starting: bool, message: String) -> void:
 	if not is_instance_valid(status_label):
 		return
 	status_label.text = message
+	status_label.tooltip_text = message
 	status_label.add_theme_color_override("font_color", ui.green_color if online else ui.muted_color)
 	status_dot.add_theme_color_override("font_color", ui.green_color if online else ui.danger_color if starting else ui.muted_color)
 	connect_toggle.set_pressed_no_signal(online or starting)
@@ -205,6 +209,8 @@ func set_network_health(healthy: bool, message: String) -> void:
 	status_label.add_theme_color_override("font_color", ui.green_color if healthy else ui.danger_color)
 	status_dot.add_theme_color_override("font_color", ui.green_color if healthy else ui.danger_color)
 	pet_speech.text = "代理入口已验证" if healthy else message
+	pet_speech.tooltip_text = message
+	pet_speech.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
 func set_mode(mode: String) -> void:
 	if mode_buttons.has(mode):
@@ -244,6 +250,9 @@ func set_dashboard_active(active: bool) -> void:
 	_dashboard_active = active
 	if is_instance_valid(traffic_graph):
 		traffic_graph.visible = active
+
+func is_dashboard_active() -> bool:
+	return _dashboard_active
 
 func push_zero_sample() -> void:
 	if _dashboard_active and is_instance_valid(traffic_graph):

@@ -19,6 +19,7 @@ class FakeProxy:
 	var config = FakeProxyConfig.new()
 
 class FakeMihomo:
+	signal event_logged(message: String)
 	signal state_changed(online: bool, starting: bool, core_pid: int, message: String)
 	signal api_result(action: String, ok: bool, payload: Variant)
 	var online := false
@@ -90,6 +91,9 @@ class FakeSubscription:
 	signal api_request_requested(action: String, endpoint: String, method: int, body: String)
 
 class FakeCoreUpdate:
+	var before_install: Callable
+	var download_proxy_port := 0
+	func cancel() -> void: busy = false
 	signal progress_changed(progress: float, message: String)
 	signal finished(success: bool, message: String)
 	var busy := false
@@ -220,6 +224,40 @@ func _run() -> void:
 	resident.connect_requested.emit(false)
 	if mihomo.stops != 1 or system_proxy.enabled or dashboard.pressed:
 		_fail("驻留断开请求没有完整关闭连接状态", 6)
+		return
+	proxy.config.tun = true
+	mihomo.online = true
+	var previous_restarts: int = mihomo.restarts
+	runtime._restore_system_proxy()
+	if proxy.config.tun or mihomo.restarts != previous_restarts + 1:
+		_fail("TUN 超时没有关闭 TUN 并重启内核", 10)
+		return
+	mihomo.state_changed.emit(true, false, 1234, "在线")
+	if not system_proxy.enabled:
+		_fail("TUN 故障后没有恢复系统代理", 10)
+		return
+	var health_logs: Array[String] = []
+	mihomo.event_logged.connect(func(message: String) -> void: health_logs.append(message))
+	runtime._health_state = "checking"
+	runtime._health_message = "代理入口尚未验证"
+	runtime._on_health_checked("checking", "代理检查：TLS 握手失败，正在复查")
+	runtime._on_health_diagnostic("https://example.com：TLS 握手失败（result=5，HTTP=0）")
+	runtime._on_health_diagnostic("https://example.com：TLS 握手失败（result=5，HTTP=0）")
+	runtime._on_health_diagnostic("https://example.com：请求超时（result=13，HTTP=0）")
+	if health_logs.size() != 3 or not health_logs[0].contains("TLS") or not health_logs[2].contains("超时"):
+		_fail("首次检查失败及变化后的诊断必须记录，相同诊断不得重复刷屏", 11)
+		return
+	runtime._on_proxy_inventory("proxies", true, {"proxies": {"六角选择": {"now": "COMPATIBLE", "all": ["COMPATIBLE"]}}})
+	if not runtime._health_message.contains("订阅未加载到节点"):
+		_fail("空订阅回退必须显示节点未加载", 12)
+		return
+	runtime._on_health_checked("partial", "端口连接错误")
+	if not runtime._health_message.contains("订阅未加载到节点"):
+		_fail("后续网络检测不得覆盖空订阅原因", 13)
+		return
+	runtime._on_proxy_inventory("proxies", true, {"proxies": {"六角选择": {"now": "节点A", "all": ["节点A"]}}})
+	if not runtime._node_load_error.is_empty():
+		_fail("节点加载后必须清除空订阅错误", 14)
 		return
 	runtime.shutdown()
 	var starts_before_shutdown_signal: int = int(mihomo.starts)

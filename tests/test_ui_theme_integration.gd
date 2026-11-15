@@ -21,9 +21,11 @@ func _run() -> void:
 	if exit_button.get_theme_color("font_color") != scene.ui.danger_color:
 		_fail("退出按钮没有使用主题危险色", 14)
 		return
-	if scene.ui.theme_id() != "blue_healing" or settings.theme_selector.item_count < 2:
+	if scene.ui.theme_id() != "qq_warm" or settings.theme_selector.item_count < 3:
 		_fail("主界面没有加载默认主题目录", 2)
 		return
+	settings.ui_theme_requested.emit("blue_healing")
+	await process_frame
 	shell.show_page("settings")
 	await process_frame
 	var nav: Button = shell.nav_buttons["dashboard"]
@@ -52,7 +54,7 @@ func _run() -> void:
 	if dark_option == null or str(dark_option.get_meta("source_path", "")).get_file() != "button_dark_normal.svg":
 		_fail("夜海黑主题下拉选择器没有更换深色图片底图", 12)
 		return
-	if shell.aquarium_background.modulate != scene.ui.background_modulate_color:
+	if not shell.aquarium_background is ColorRect or shell.aquarium_background.modulate != scene.ui.background_modulate_color:
 		_fail("夜海黑没有同步压暗水族箱背景", 6)
 		return
 	var settings_page: Control = shell.pages["settings"]

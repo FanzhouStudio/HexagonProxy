@@ -52,6 +52,16 @@ func mixed_port() -> int:
 func tun_enabled() -> bool:
 	return _tun_enabled
 
+func tun_outbound_interface() -> String:
+	if OS.get_name() != "Windows":
+		return ""
+	# Bind the core to the real default-route adapter, never its own TUN.
+	var output: Array = []
+	var script := "$ErrorActionPreference='Stop';$c=@(foreach($r in Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0'){$a=Get-NetAdapter -InterfaceIndex $r.InterfaceIndex -ErrorAction SilentlyContinue;if($a -and $a.HardwareInterface -and $a.Status -eq 'Up'){$i=Get-NetIPInterface -AddressFamily IPv4 -InterfaceIndex $r.InterfaceIndex;[pscustomobject]@{name=$a.Name;metric=($r.RouteMetric+$i.InterfaceMetric)}}});$c | Sort-Object metric | Select-Object -First 1 -ExpandProperty name"
+	if OS.execute("powershell.exe", PackedStringArray(["-NoProfile", "-NonInteractive", "-Command", script]), output, false, false) != 0:
+		return ""
+	return "".join(output).strip_edges()
+
 func set_tun_enabled(value: bool) -> bool:
 	var previous := _tun_enabled
 	_tun_enabled = value

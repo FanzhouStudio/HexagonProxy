@@ -30,6 +30,7 @@ var _failover_snapshot: Dictionary = {}
 var selected_group_index := 0
 var delay_cache := {}
 var _group_delay_pending: Array[String] = []
+var _delay_errors: Dictionary = {}
 var _current_node_name := ""
 var _rebuild_generation := 0
 var _rendered_structure_signature := ""
@@ -100,6 +101,10 @@ func set_active(value: bool) -> void:
 		_building_structure_signature = ""
 		return
 	_ensure_nodes_rendered()
+	_refresh_visible_node_states()
+
+func is_active() -> bool:
+	return _page_active
 
 func set_global_mode_active(value: bool) -> void:
 	_global_mode_active = value
@@ -145,6 +150,10 @@ func handle_api_result(action: String, ok: bool, payload: Variant) -> bool:
 		return true
 	if action.begins_with("delay:"):
 		var proxy_name := action.trim_prefix("delay:")
+		_delay_errors.erase(proxy_name)
+		if not ok and payload is Dictionary:
+			var code := int(payload.get("_http_status", 0))
+			_delay_errors[proxy_name] = "连接超时" if code == 504 else "节点不存在" if code == 404 else str(payload.get("message", "测速请求失败"))
 		delay_cache[proxy_name] = int(payload.get("delay", -1)) if ok and payload is Dictionary else -1
 		_refresh_node_view(proxy_name)
 		_emit_node_status()
@@ -160,6 +169,8 @@ func handle_api_result(action: String, ok: bool, payload: Variant) -> bool:
 		return true
 	return false
 func _apply_group_delay(ok: bool, payload: Variant) -> void:
+	for proxy_name in _group_delay_pending:
+		_delay_errors.erase(proxy_name)
 	if ok and payload is Dictionary:
 		for proxy_name in _group_delay_pending:
 			if not payload.has(proxy_name):
@@ -253,7 +264,6 @@ func _ensure_nodes_rendered() -> void:
 		return
 	var signature := _selected_structure_signature()
 	if signature == _rendered_structure_signature:
-		_refresh_visible_node_states()
 		return
 	if signature == _building_structure_signature:
 		return
@@ -314,10 +324,14 @@ func _rebuild_nodes() -> void:
 	_refresh_visible_node_states()
 
 func _refresh_visible_node_states() -> void:
+	if not _page_active:
+		return
 	for proxy_name in _node_views.keys():
 		_refresh_node_view(str(proxy_name))
 
 func _refresh_node_view(proxy_name: String) -> void:
+	if not _page_active:
+		return
 	var raw: Variant = _node_views.get(proxy_name, {})
 	if not raw is Dictionary:
 		return
@@ -363,6 +377,9 @@ func _node_card(group_name: String, proxy_name: String, selected: bool, views: D
 	var delay_text := "测速" if delay == 0 else "测速中…" if delay == -2 else "失败" if delay < 0 else "%d ms" % delay
 	var delay_color := MUTED if delay in [0, -2] else RED if delay < 0 else GREEN if delay < 180 else YELLOW
 	var delay_label := ui.label(delay_text, 12, delay_color)
+	if delay < 0 and delay != -2 and _delay_errors.has(proxy_name):
+		delay_label.text = str(_delay_errors[proxy_name]) if str(_delay_errors[proxy_name]) in ["连接超时", "节点不存在"] else "失败"
+		delay_label.tooltip_text = str(_delay_errors[proxy_name])
 	delay_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(delay_label)
 	var test := ui.small_choice_button("测")

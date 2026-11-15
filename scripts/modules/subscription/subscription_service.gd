@@ -152,6 +152,31 @@ func active_subscription_id() -> String:
 	_ensure_dependencies()
 	return library.active_id()
 
+func save_expiry(entry_id: String, payload: Dictionary) -> void:
+	_ensure_dependencies()
+	var index: int = library.catalog.index_of(entry_id)
+	if index < 0:
+		return
+	var previous: Dictionary = library.catalog.entry_at(index).duplicate(true)
+	if previous.get("type", "") != "http":
+		return
+	var expires := -1
+	var info: Variant = payload.get("subscriptionInfo")
+	if info is Dictionary:
+		var value: Variant = info.get("Expire", info.get("expire", 0))
+		if (value is int or value is float) and float(value) > 0 and float(value) < 253402300800.0:
+			expires = int(value)
+	if previous.get("expiry_checked", false) and int(previous.get("expires_at", -1)) == expires:
+		return
+	var entry := previous.duplicate(true)
+	entry["expires_at"] = expires
+	entry["expiry_checked"] = true
+	library.catalog.set_entry(index, entry)
+	if not library.catalog.save():
+		library.catalog.set_entry(index, previous)
+		return
+	subscriptions_changed.emit()
+
 func activate_subscription(entry_id: String) -> bool:
 	return _activate_subscription(entry_id, true)
 

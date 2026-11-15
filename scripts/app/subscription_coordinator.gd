@@ -8,8 +8,17 @@ extends Node
 var subscription_service
 var subscription_panel
 var _active := false
+var _control
+var _timer: Timer
 
-func setup(service, panel) -> void:
+func setup(service, panel, control = null) -> void:
+	_control = control
+	if _control:
+		_control.api_result.connect(_on_expiry_result)
+		_control.state_changed.connect(func(online: bool, _starting: bool, _pid: int, _message: String) -> void:
+			if online:
+				_request_expiry()
+		)
 	subscription_service = service
 	subscription_panel = panel
 	subscription_panel.subscription_url_requested.connect(_on_subscription_url_requested)
@@ -25,9 +34,38 @@ func start() -> void:
 		return
 	_active = true
 	_refresh_snapshot()
+	if _control:
+		_timer = Timer.new()
+		_timer.wait_time = 60
+		_timer.timeout.connect(_request_expiry)
+		add_child(_timer)
+		_timer.start()
+		_request_expiry()
 
 func shutdown() -> void:
 	_active = false
+	if is_instance_valid(_timer):
+		_timer.stop()
+
+func _request_expiry() -> void:
+	if not _active or _control == null or not _control.online:
+		return
+	var id: String = subscription_service.active_subscription_id()
+	for entry in subscription_service.get_subscriptions():
+		if str(entry.get("id", "")) == id and entry.get("type", "") == "http":
+			_control.request("subscription_expiry:" + id, "/providers/proxies/hexagon-subscription", HTTPClient.METHOD_GET)
+			return
+
+func _on_expiry_result(action: String, ok: bool, payload: Variant) -> void:
+	if not _active or not ok:
+		return
+	if action == "update_provider":
+		_request_expiry()
+	elif action.begins_with("subscription_expiry:") and payload is Dictionary:
+		var id := action.trim_prefix("subscription_expiry:")
+		if id == subscription_service.active_subscription_id():
+			subscription_service.save_expiry(id, payload)
+			_refresh_snapshot()
 func _on_subscription_url_requested(url: String) -> void:
 	if not _active:
 		return

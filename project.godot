@@ -11,11 +11,13 @@ config_version=5
 [application]
 
 config/name="HexagonProxy"
-config/description="一只会守护网络的像素美西螈"
+config/description="六角恐龙，守护每一次连接"
 run/main_scene="res://main.tscn"
+run/low_processor_mode=true
+run/low_processor_mode_sleep_usec=10000
 config/features=PackedStringArray("4.7", "GL Compatibility")
-boot_splash/bg_color=Color(0.043, 0.055, 0.094, 1)
-boot_splash/image="res://assets/app_icon.png"
+boot_splash/bg_color=Color(0.2863, 0.2745, 0.2471, 1)
+boot_splash/image="res://assets/ui/boot_mark.png"
 config/icon="res://assets/app_icon.png"
 
 [display]

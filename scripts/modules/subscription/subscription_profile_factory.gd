@@ -38,6 +38,7 @@ profile:
 proxy-providers:
   hexagon-subscription:
     type: http
+    proxy: DIRECT
     url: '%s'
     path: ./providers/hexagon-subscription.yaml
     interval: 3600

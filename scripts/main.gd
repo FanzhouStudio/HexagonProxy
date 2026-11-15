@@ -10,6 +10,7 @@ const NodeFailoverCoordinatorScript = preload("res://scripts/app/node_failover_c
 const RoutingCoordinatorScript = preload("res://scripts/app/routing_coordinator.gd")
 const TerminalCoordinatorScript = preload("res://scripts/app/terminal_coordinator.gd")
 const CodexProfileCoordinatorScript = preload("res://scripts/app/codex_profile_coordinator.gd")
+const AntigravityProxyCoordinatorScript = preload("res://scripts/app/antigravity_proxy_coordinator.gd")
 const WindowModeControllerScript = preload("res://scripts/app/window_mode_controller.gd")
 const WindowChromeCoordinatorScript = preload("res://scripts/app/window_chrome_coordinator.gd")
 const UiThemeCoordinatorScript = preload("res://scripts/app/ui_theme_coordinator.gd")
@@ -44,6 +45,7 @@ var node_failover_coordinator: NodeFailoverCoordinator
 var routing_coordinator: RoutingCoordinator
 var terminal_coordinator: TerminalCoordinator
 var codex_profile_coordinator: CodexProfileCoordinator
+var antigravity_proxy_coordinator: AntigravityProxyCoordinator
 var window_mode_controller: WindowModeController
 var window_chrome_coordinator: WindowChromeCoordinator
 var ui_theme_coordinator: UiThemeCoordinator
@@ -143,6 +145,12 @@ func _ready() -> void:
 	add_child(app_shell)
 	app_shell.setup(self, ui, dashboard_panel, nodes_panel, subscription_panel, routing_panel, terminal_panel, codex_accounts_panel, settings_panel)
 	app_shell.build(subscription_service.current_profile_name)
+	var antigravity_proxy_service = app.get_service("antigravity_proxy")
+	antigravity_proxy_service.event_logged.connect(dashboard_panel.append_log)
+	antigravity_proxy_coordinator = AntigravityProxyCoordinatorScript.new()
+	add_child(antigravity_proxy_coordinator)
+	antigravity_proxy_coordinator.setup(antigravity_proxy_service, app_shell.antigravity_proxy_panel, mihomo_control)
+	antigravity_proxy_coordinator.start()
 	ui_theme_coordinator = UiThemeCoordinatorScript.new()
 	add_child(ui_theme_coordinator)
 	ui_theme_coordinator.setup(ui_theme_service, ui, settings_panel)
@@ -155,7 +163,7 @@ func _ready() -> void:
 	window_chrome_coordinator.start()
 	subscription_coordinator = SubscriptionCoordinatorScript.new()
 	add_child(subscription_coordinator)
-	subscription_coordinator.setup(subscription_service, subscription_panel)
+	subscription_coordinator.setup(subscription_service, subscription_panel, mihomo_control)
 	subscription_coordinator.start()
 	routing_coordinator = RoutingCoordinatorScript.new()
 	add_child(routing_coordinator)
@@ -198,6 +206,8 @@ func _ready() -> void:
 	get_window().close_requested.connect(resident.request_close)
 	if "--tray-start" in OS.get_cmdline_user_args():
 		resident.call_deferred("start_in_tray")
+	elif DisplayServer.get_name() != "headless":
+		add_child(preload("res://scripts/ui/startup_intro.gd").new())
 
 func _quit_application() -> void:
 	if _quitting:
@@ -213,6 +223,8 @@ func _quit_application() -> void:
 		terminal_coordinator.shutdown()
 	if codex_profile_coordinator:
 		codex_profile_coordinator.shutdown()
+	if antigravity_proxy_coordinator:
+		antigravity_proxy_coordinator.shutdown()
 	if settings_coordinator:
 		settings_coordinator.shutdown()
 	if port_conflict_coordinator:

@@ -4,6 +4,7 @@ extends Node
 signal window_action_requested(action_id: String)
 
 const AquariumBackgroundScript = preload("res://scripts/aquarium_background.gd")
+const AntigravityProxyPanelScript = preload("res://scripts/ui/antigravity_proxy_panel.gd")
 const WINDOW_ACTIONS := [
 	{"id": "minimize", "text": "最小化", "tooltip": "最小化到任务栏", "width": 84},
 	{"id": "close", "text": "关闭", "tooltip": "关闭主窗口并继续后台守护", "width": 72},
@@ -22,6 +23,7 @@ var subscription_panel: SubscriptionPanel
 var routing_panel: RoutingPanel
 var terminal_panel: TerminalPanel
 var codex_accounts_panel: CodexAccountsPanel
+var antigravity_proxy_panel: AntigravityProxyPanel
 var settings_panel: SettingsPanel
 var page_host: Control
 var pages := {}
@@ -43,27 +45,37 @@ func setup(owner: Control, factory: UiFactory, dashboard: DashboardPanel, nodes:
 	settings_panel = settings
 
 func build(profile_name: String) -> void:
-	aquarium_background = AquariumBackgroundScript.new()
-	aquarium_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var app_theme := Theme.new()
+	var font := SystemFont.new()
+	font.font_names = PackedStringArray(["Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI"])
+	app_theme.default_font = font
+	host.theme = app_theme
+	host.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	var background := ColorRect.new()
+	background.color = Color.WHITE
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	aquarium_background = background
 	ui.apply_background_theme(aquarium_background)
+	aquarium_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	host.add_child(aquarium_background)
 	host.move_child(aquarium_background, 0)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_left", 0)
+	margin.add_theme_constant_override("margin_top", 0)
+	margin.add_theme_constant_override("margin_right", 0)
+	margin.add_theme_constant_override("margin_bottom", 0)
 	host.add_child(margin)
 	var shell := HBoxContainer.new()
-	shell.add_theme_constant_override("separation", 18)
+	shell.add_theme_constant_override("separation", 0)
 	margin.add_child(shell)
 
-	var sidebar := ui.panel(Color("e6fbf8dc"), Color("c7fffff2"), 22)
-	sidebar.custom_minimum_size = Vector2(250, 0)
+	_build_rail(shell)
+	var sidebar := ui.panel(Color("e6fbf8dc"), Color("c7fffff2"), 0)
+	sidebar.custom_minimum_size = Vector2(210, 0)
 	shell.add_child(sidebar)
-	var side_margin := ui.margin(16, 18, 16, 16)
+	var side_margin := ui.margin(6, 20, 6, 20)
 	sidebar.add_child(side_margin)
 	var side := VBoxContainer.new()
 	side.add_theme_constant_override("separation", 10)
@@ -72,12 +84,14 @@ func build(profile_name: String) -> void:
 	var spacer_small := Control.new()
 	spacer_small.custom_minimum_size.y = 14
 	side.add_child(spacer_small)
+	side.add_child(ui.label("工作台", 11, MUTED))
 	_add_nav(side, "dashboard", "⌂  总览")
 	_add_nav(side, "nodes", "⬡  节点")
 	_add_nav(side, "subscription", "↻  订阅")
 	_add_nav(side, "routing", "⇄  分流")
 	_add_nav(side, "terminal", ">_  终端")
 	_add_nav(side, "codex", "◈  Codex 账号")
+	_add_nav(side, "antigravity", "↗  Antigravity")
 	_add_nav(side, "settings", "⚙  设置")
 	var side_spacer := Control.new()
 	side_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -85,10 +99,13 @@ func build(profile_name: String) -> void:
 	var side_note := ui.label("Mihomo powered", 11, MUTED)
 	side.add_child(side_note)
 
+	var content_margin := ui.margin(24, 14, 24, 24)
+	content_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shell.add_child(content_margin)
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 14)
-	shell.add_child(body)
+	content_margin.add_child(body)
 	_build_topbar(body)
 	page_host = Control.new()
 	page_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -100,6 +117,10 @@ func build(profile_name: String) -> void:
 	pages["routing"] = routing_panel.build()
 	pages["terminal"] = terminal_panel.build()
 	pages["codex"] = codex_accounts_panel.build()
+	antigravity_proxy_panel = AntigravityProxyPanelScript.new()
+	add_child(antigravity_proxy_panel)
+	antigravity_proxy_panel.setup(ui)
+	pages["antigravity"] = antigravity_proxy_panel.build()
 	pages["settings"] = settings_panel.build()
 	for page in pages.values():
 		page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -116,6 +137,7 @@ func show_page(page_id: String) -> void:
 		"routing": "应用分流",
 		"terminal": "内置终端",
 		"codex": "Codex 账号",
+		"antigravity": "Antigravity",
 		"settings": "偏好设置"
 	}
 	for page_name in pages:
@@ -135,27 +157,21 @@ func _build_brand(parent: Container) -> void:
 	row.add_theme_constant_override("separation", 10)
 	parent.add_child(row)
 	var icon := TextureRect.new()
-	icon.texture = load("res://assets/app_icon.png")
-	icon.custom_minimum_size = Vector2(58, 58)
+	icon.texture = ui.axolotl_texture()
+	icon.custom_minimum_size = Vector2(32, 32)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	row.add_child(icon)
-	var title := ui.label("HexagonProxy", 22, Color("12384a"))
+	var title := ui.label("HexagonProxy", 15, Color("12384a"))
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_shadow_color", Color(1, 1, 1, 0.6))
-	title.add_theme_constant_override("shadow_offset_x", 2)
-	title.add_theme_constant_override("shadow_offset_y", 2)
 	row.add_child(title)
 
 func _build_topbar(parent: Container) -> void:
 	var top := HBoxContainer.new()
 	top.custom_minimum_size.y = 54
 	parent.add_child(top)
-	page_title = ui.label("网络总览", 26, OVERLAY_TEXT)
-	page_title.add_theme_color_override("font_shadow_color", Color("06344da0"))
-	page_title.add_theme_constant_override("shadow_offset_x", 2)
-	page_title.add_theme_constant_override("shadow_offset_y", 2)
+	page_title = ui.label("网络总览", 20, OVERLAY_TEXT)
 	page_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(page_title)
 	var status_pill := ui.panel(Color("f7ffffdf"), Color("a8e8e8e8"), 16)
@@ -169,6 +185,9 @@ func _build_topbar(parent: Container) -> void:
 	var status_dot := ui.label("●", 12, MUTED)
 	status_row.add_child(status_dot)
 	var status_label := ui.label("代理未连接", 13, MUTED)
+	status_label.custom_minimum_size.x = 230
+	status_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_row.add_child(status_label)
 	dashboard_panel.bind_status_controls(status_label, status_dot)
 	var action_row := HBoxContainer.new()
@@ -184,7 +203,7 @@ func _build_window_actions(parent: HBoxContainer) -> void:
 		var action_id := str(action.get("id", ""))
 		var action_color := ui.danger_color if bool(action.get("danger", false)) else Color.TRANSPARENT
 		var button := ui.small_choice_button(str(action.get("text", action_id)), action_color)
-		button.custom_minimum_size = Vector2(float(action.get("width", 72)), 40)
+		button.custom_minimum_size = Vector2(float(action.get("width", 72)), 34)
 		button.tooltip_text = str(action.get("tooltip", ""))
 		button.pressed.connect(_on_window_action.bind(action_id))
 		parent.add_child(button)
@@ -196,7 +215,29 @@ func _on_window_action(action_id: String) -> void:
 func _add_nav(parent: Container, page_name: String, text: String) -> void:
 	var button := ui.button(text, Color("f4ffffa8"), MUTED)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.custom_minimum_size.y = 44
+	button.custom_minimum_size.y = 52
 	button.pressed.connect(func() -> void: show_page(page_name))
 	parent.add_child(button)
 	nav_buttons[page_name] = button
+
+func _build_rail(parent: Container) -> void:
+	var rail := ui.panel(ui.console_bg_color, ui.console_bg_color, 0)
+	rail.custom_minimum_size.x = 64
+	parent.add_child(rail)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 14)
+	rail.add_child(column)
+	for item in [["⌂", "dashboard", "总览"], ["⬡", "nodes", "节点"], ["◈", "codex", "Codex 账号"], ["↗", "antigravity", "Antigravity"]]:
+		var button := ui.small_choice_button(item[0])
+		button.custom_minimum_size = Vector2(40, 44)
+		button.add_theme_font_size_override("font_size", 22)
+		button.tooltip_text = item[2]
+		button.pressed.connect(func() -> void: show_page(item[1]))
+		column.add_child(button)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(spacer)
+	var settings := ui.small_choice_button("⚙")
+	settings.tooltip_text = "偏好设置"
+	settings.pressed.connect(func() -> void: show_page("settings"))
+	column.add_child(settings)

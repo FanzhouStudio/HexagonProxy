@@ -54,6 +54,7 @@ func _ensure_components() -> void:
 	tun_profile_transformer = TunProfileTransformerScript.new()
 	tun_profile_transformer.setup(config)
 	profile_pipeline.register_transformer("tun_mode", tun_profile_transformer, 20)
+	profile_pipeline.register_transformer("local_address_protection", preload("res://scripts/modules/proxy/local_address_transformer.gd").new(), 1000)
 	add_child(process)
 	add_child(launcher)
 	add_child(validator)

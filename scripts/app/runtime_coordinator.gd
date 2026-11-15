@@ -21,7 +21,42 @@ var _health
 var _health_timer: Timer
 var _health_message := "代理入口尚未验证"
 var _health_state := "checking"
+var _last_health_diagnostic := ""
+var _node_load_error := ""
 var _last_health_check := -20000
+var _tun_watchdog: Timer
+
+func _record_tun_diagnostic(reason: String) -> void:
+	var directory := ProjectSettings.globalize_path("user://diagnostics")
+	DirAccess.make_dir_recursive_absolute(directory)
+	var file := FileAccess.open(directory.path_join("tun-events.log"), FileAccess.READ_WRITE)
+	if file == null:
+		file = FileAccess.open(directory.path_join("tun-events.log"), FileAccess.WRITE)
+	if file:
+		file.seek_end()
+		file.store_line("%s %s" % [Time.get_datetime_string_from_system(), reason])
+	if OS.get_name() == "Windows":
+		var stamp := Time.get_datetime_string_from_system().replace(":", "-") + "-" + str(Time.get_ticks_msec())
+		var output := directory.path_join("tun-network-" + stamp + ".json").replace("'", "''")
+		var script := "$d=@{time=(Get-Date -Format o);adapters=@(Get-NetAdapter | Select-Object Name,InterfaceDescription,ifIndex,Status);routes=@(Get-NetRoute -AddressFamily IPv4 | Select-Object DestinationPrefix,NextHop,InterfaceIndex,RouteMetric);dns=@(Get-DnsClientServerAddress -AddressFamily IPv4 | Select-Object InterfaceAlias,ServerAddresses)};$d | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath '%s' -Encoding UTF8" % output
+		OS.create_process("powershell.exe", PackedStringArray(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script]), false)
+
+func _arm_tun_watchdog() -> void:
+	_record_tun_diagnostic("TUN enabled: checking connectivity")
+	_tun_watchdog.start()
+
+func _restore_system_proxy() -> void:
+	if not _active or not proxy_service.config.tun_enabled():
+		return
+	_record_tun_diagnostic("TUN failed: restoring system proxy")
+	if not proxy_service.config.set_tun_enabled(false):
+		settings_panel.reject_tun_enable("TUN 检测失败，恢复设置失败，请关闭代理。")
+		return
+	_tun_watchdog.stop()
+	settings_panel.set_tun_state(false)
+	settings_panel.reject_tun_enable("TUN 联网检测失败，正在恢复系统代理。诊断已保存。")
+	_enable_proxy_when_online = true
+	mihomo_control.restart()
 
 func setup(proxy, control, system_proxy, subscription, dashboard, settings, resident_controller, shell) -> void:
 	proxy_service = proxy
@@ -39,6 +74,7 @@ func setup(proxy, control, system_proxy, subscription, dashboard, settings, resi
 	system_proxy_service.busy_changed.connect(_on_system_proxy_busy_changed)
 	resident.connect_requested.connect(_on_resident_connect_requested)
 	mihomo_control.state_changed.connect(_on_mihomo_state_changed)
+	mihomo_control.api_result.connect(_on_proxy_inventory)
 	subscription_service.profile_changed.connect(_on_profile_changed)
 	subscription_service.restart_requested.connect(_on_subscription_restart_requested)
 	subscription_service.api_request_requested.connect(_on_subscription_api_request)
@@ -47,9 +83,17 @@ func start() -> void:
 	if _active:
 		return
 	_active = true
+	_tun_watchdog = Timer.new()
+	_tun_watchdog.one_shot = true
+	_tun_watchdog.wait_time = 45
+	_tun_watchdog.timeout.connect(_restore_system_proxy)
+	add_child(_tun_watchdog)
+	if proxy_service.config.tun_enabled():
+		_arm_tun_watchdog()
 	_health = preload("res://scripts/modules/network/proxy_health_service.gd").new()
 	add_child(_health)
 	_health.checked.connect(_on_health_checked)
+	_health.diagnostic_logged.connect(_on_health_diagnostic)
 	_health_timer = Timer.new()
 	_health_timer.wait_time = 20
 	_health_timer.timeout.connect(_check_health)
@@ -62,6 +106,8 @@ func shutdown() -> void:
 	_active = false
 	_pending_tun_enable = false
 	_pending_tun_start = false
+	if is_instance_valid(_tun_watchdog):
+		_tun_watchdog.stop()
 	if is_instance_valid(_health_timer):
 		_health_timer.stop()
 	if is_instance_valid(_health):
@@ -74,17 +120,55 @@ func _check_health() -> void:
 	if Time.get_ticks_msec() - _last_health_check < 20000:
 		return
 	_last_health_check = Time.get_ticks_msec()
-	_health.probe(proxy_service.config.controller_host(), proxy_service.config.mixed_port())
+	_health.probe(proxy_service.config.controller_host(), proxy_service.config.mixed_port(), proxy_service.config.tun_enabled())
 	if _enable_proxy_when_online and not system_proxy_service.busy:
 		system_proxy_service.reconcile()
+
+func _on_proxy_inventory(action: String, ok: bool, payload: Variant) -> void:
+	if not _active or not mihomo_control.online or action != "proxies" or not ok or not payload is Dictionary:
+		return
+	var inventory: Variant = payload.get("proxies", {})
+	if not inventory is Dictionary:
+		return
+	var group: Variant = inventory.get("六角选择", {})
+	var missing: bool = group is Dictionary and group.get("now", "") == "COMPATIBLE"
+	var message := "订阅未加载到节点（COMPATIBLE 回退）；请在订阅页更新并检查订阅地址是否可访问" if missing else ""
+	if message == _node_load_error:
+		return
+	_node_load_error = message
+	if missing:
+		_on_health_checked("failed", message)
+	else:
+		_on_health_checked("checking", "节点已加载，等待连通性检查")
+		_last_health_check = -20000
+		_check_health()
+
+func _on_health_diagnostic(message: String) -> void:
+	if not _active or not mihomo_control.online:
+		return
+	if not message.is_empty() and message != _last_health_diagnostic:
+		mihomo_control.event_logged.emit(message)
+	_last_health_diagnostic = message
 
 func _on_health_checked(state: String, message: String) -> void:
 	if not _active or not mihomo_control.online:
 		return
-	if state != _health_state:
+	if not _node_load_error.is_empty():
+		state = "failed"
+		message = _node_load_error
+	if state != _health_state or message != _health_message:
 		mihomo_control.event_logged.emit(message)
 	_health_state = state
 	_health_message = message
+	if proxy_service.config.tun_enabled():
+		_record_tun_diagnostic("HTTPS check: " + state + " " + message)
+		if state == "healthy":
+			_tun_watchdog.stop()
+		elif state == "partial" and _tun_watchdog.is_stopped():
+			_tun_watchdog.start()
+		elif state == "failed":
+			_restore_system_proxy()
+			return
 	_on_status_changed(true, message)
 
 func _on_mihomo_state_changed(value_online: bool, value_starting: bool, _value_pid: int, message: String) -> void:
@@ -99,6 +183,8 @@ func _on_mihomo_state_changed(value_online: bool, value_starting: bool, _value_p
 		_health.cancel()
 		_last_health_check = -20000
 		_health_state = "checking"
+		_last_health_diagnostic = ""
+		_node_load_error = ""
 		_health_message = "代理入口尚未验证"
 
 func _on_connect_toggled(enabled: bool) -> void:
@@ -190,6 +276,10 @@ func _apply_tun_state(enabled: bool) -> void:
 		return
 	_enable_proxy_when_online = false
 	settings_panel.set_tun_state(enabled)
+	if enabled:
+		_arm_tun_watchdog()
+	else:
+		_tun_watchdog.stop()
 	if mihomo_control.online or mihomo_control.starting or mihomo_control.core_pid > 0:
 		settings_panel.set_tun_busy(true)
 		mihomo_control.restart()

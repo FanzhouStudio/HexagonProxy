@@ -40,6 +40,14 @@ func _run() -> void:
 	var service = UpdateServiceScript.new()
 	root.add_child(service)
 	service.bind_config(config)
+	if not service._failure_message("下载", HTTPRequest.RESULT_TIMEOUT, 0).contains("超时") or service._failure_message("下载", HTTPRequest.RESULT_TIMEOUT, 0).contains("HTTP 0"):
+		_fail("网络错误必须显示具体原因而非 HTTP 0", 6)
+		return
+	service.download_proxy_port = 17890
+	service._request = HTTPRequest.new()
+	service.add_child(service._request)
+	service._configure_transport()
+	service._clear_request()
 	var fake_installer = FakeInstaller.new()
 	service.archive_installer = fake_installer
 	var archive_path: String = str(config.base_dir).path_join("download.zip")
@@ -65,6 +73,19 @@ func _run() -> void:
 		return
 	if FileAccess.file_exists(archive_path):
 		_fail("更新完成后没有清理下载临时包", 5)
+		return
+	var invalid_archive := FileAccess.open(archive_path, FileAccess.WRITE)
+	invalid_archive.store_string("corrupted")
+	invalid_archive.close()
+	var stop_calls: Array = []
+	service.before_install = func() -> bool:
+		stop_calls.append(true)
+		return true
+	service._archive_path = archive_path
+	service._expected_sha256 = "invalid-digest"
+	service._on_archive_received(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), PackedByteArray())
+	if not stop_calls.is_empty() or fake_installer.calls != 1:
+		_fail("校验失败不得停止旧内核或执行安装", 7)
 		return
 	service.queue_free()
 	print("PASS: CoreArchiveInstaller 损坏包保护与 CoreUpdateService 安装委托")

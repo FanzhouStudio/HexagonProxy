@@ -24,15 +24,23 @@ const LOCAL_HOST_PATTERNS := [
 ]
 
 func mihomo_direct_rules() -> PackedStringArray:
-	var rules := PackedStringArray([
-		"  - DOMAIN,localhost,DIRECT",
-		"  - DOMAIN-SUFFIX,localhost,DIRECT",
-	])
+	var rules := mihomo_loopback_rules()
 	for network: Dictionary in IPV4_NETWORKS:
+		if str(network.get("cidr", "")) == "127.0.0.0/8":
+			continue
 		rules.append("  - IP-CIDR,%s,DIRECT,no-resolve" % str(network.get("cidr", "")))
 	for cidr: String in IPV6_NETWORKS:
-		rules.append("  - IP-CIDR6,%s,DIRECT,no-resolve" % cidr)
+		if cidr != "::1/128":
+			rules.append("  - IP-CIDR6,%s,DIRECT,no-resolve" % cidr)
 	return rules
+
+func mihomo_loopback_rules() -> PackedStringArray:
+	return PackedStringArray([
+		"  - DOMAIN,localhost,DIRECT",
+		"  - DOMAIN-SUFFIX,localhost,DIRECT",
+		"  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
+		"  - IP-CIDR6,::1/128,DIRECT,no-resolve",
+	])
 
 func windows_proxy_override() -> String:
 	var patterns := PackedStringArray()

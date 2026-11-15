@@ -78,12 +78,18 @@ func _load_selection() -> void:
 	if settings.load(SETTINGS_PATH) != OK:
 		return
 	var saved := str(settings.get_value("ui", "theme", _default_id))
+	# Apply the redesigned default once to existing installations.
+	if int(settings.get_value("ui", "design_version", 0)) < 2:
+		_current_id = _default_id
+		_save_selection()
+		return
 	if _themes.has(saved):
 		_current_id = saved
 
 func _save_selection() -> void:
 	var settings := ConfigFile.new()
 	settings.set_value("ui", "theme", _current_id)
+	settings.set_value("ui", "design_version", 2)
 	settings.save(SETTINGS_PATH)
 
 func dispose() -> void:

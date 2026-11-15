@@ -18,24 +18,73 @@ func transform_profile(content: String, _context := {}) -> Dictionary:
 		"  enable: %s" % ("true" if proxy_config.tun_enabled() else "false")
 	])
 	if proxy_config.tun_enabled():
+		cleaned = _ensure_dns(cleaned)
+		var outbound: String = proxy_config.tun_outbound_interface()
+		if not outbound.is_empty():
+			cleaned = _remove_top_level_key(cleaned, "interface-name")
+			cleaned = "interface-name: " + JSON.stringify(outbound) + "\n" + cleaned
 		block.append_array(PackedStringArray([
-			"  stack: mixed",
+			"  stack: gvisor",
 			"  auto-route: true",
-			"  auto-detect-interface: true",
+			"  auto-detect-interface: %s" % ("true" if outbound.is_empty() else "false"),
 			"  dns-hijack:",
 			"    - any:53",
 			"    - tcp://any:53",
-			"  strict-route: false"
+			"  strict-route: true",
+			"  route-exclude-address:",
+			"    - 127.0.0.0/8",
+			"    - ::1/128",
+			"  mtu: 1500"
 		]))
 	return {"ok": true, "content": "\n".join(block) + "\n" + cleaned.trim_prefix("\n")}
 
+func _ensure_dns(content: String) -> String:
+	var lines := content.split("\n")
+	var start := -1
+	var end := lines.size()
+	var pattern := RegEx.new()
+	pattern.compile("^(?:dns|[\"']dns[\"'])\\s*:\\s*(?:#.*)?$")
+	for i in lines.size():
+		if start < 0 and pattern.search(lines[i]) != null:
+			start = i
+		elif start >= 0 and _is_next_top_level_key(lines[i]):
+			end = i
+			break
+	if start < 0:
+		return "dns:\n  enable: true\n  ipv6: false\n  enhanced-mode: fake-ip\n  fake-ip-range: 198.18.0.1/16\n  default-nameserver:\n    - 223.5.5.5\n    - 119.29.29.29\n  nameserver:\n    - https://dns.alidns.com/dns-query\n    - https://doh.pub/dns-query\n" + content
+	var result: Array[String] = []
+	var has_nameserver := false
+	var enable_pattern := RegEx.new()
+	enable_pattern.compile("^  (?:enable|[\"']enable[\"'])\\s*:")
+	for i in lines.size():
+		if i == start:
+			result.append(lines[i])
+			result.append("  enable: true")
+			continue
+		if i > start and i < end:
+			if enable_pattern.search(lines[i]) != null:
+				continue
+			if lines[i].begins_with("  nameserver:"):
+				has_nameserver = true
+		if i == end and not has_nameserver:
+			result.append("  nameserver: [223.5.5.5, 119.29.29.29]")
+		result.append(lines[i])
+	if end == lines.size() and not has_nameserver:
+		result.append("  nameserver: [223.5.5.5, 119.29.29.29]")
+	return "\n".join(result)
+
 func _remove_top_level_tun(content: String) -> String:
+	return _remove_top_level_key(content, "tun")
+
+func _remove_top_level_key(content: String, key: String) -> String:
 	var lines := content.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 	var result: Array[String] = []
 	var skipping := false
 	for raw in lines:
 		var line := str(raw)
-		if not skipping and _is_tun_header(line):
+		var header := RegEx.new()
+		header.compile("^(?:%s|[\"']%s[\"'])\\s*:" % [key, key])
+		if not skipping and header.search(line) != null:
 			skipping = true
 			continue
 		if skipping:

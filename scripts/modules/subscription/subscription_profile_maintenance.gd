@@ -19,12 +19,35 @@ func repair_entry(entry: Dictionary, active_id: String) -> Dictionary:
 	var repaired: Dictionary = entry.duplicate(true)
 	var messages: Array[String] = []
 	var index_changed := _repair_v2(repaired, active_id, messages)
+	_repair_http_bootstrap(repaired, active_id, messages)
 	_upgrade_routing_rules(repaired, active_id, messages)
 	return {
 		"entry": repaired,
 		"index_changed": index_changed,
 		"messages": messages
 	}
+
+func _repair_http_bootstrap(entry: Dictionary, active_id: String, messages: Array[String]) -> void:
+	if str(entry.get("type", "")) != "http":
+		return
+	var path: String = store.library_dir().path_join(str(entry.get("config_file", "")))
+	var yaml := FileAccess.get_file_as_string(path)
+	var marker := "  hexagon-subscription:\n"
+	var begin := yaml.find(marker)
+	if begin < 0:
+		return
+	var end := yaml.find("\nproxy-groups:", begin)
+	if end < 0:
+		return
+	var provider := yaml.substr(begin, end - begin)
+	if provider.contains("\n    proxy:") or not provider.contains("\n    type: http\n"):
+		return
+	provider = provider.replace("\n    type: http\n", "\n    type: http\n    proxy: DIRECT\n")
+	var repaired := yaml.left(begin) + provider + yaml.substr(end)
+	if store.write_text_atomic(path, repaired):
+		if str(entry.get("id", "")) == active_id:
+			store.write_text_atomic(proxy_config.active_profile_path(), repaired)
+		messages.append("已修复订阅下载路由，首次加载节点不再依赖空代理组。")
 func _repair_v2(entry: Dictionary, active_id: String, messages: Array[String]) -> bool:
 	if str(entry.get("type", "")) != "v2":
 		return false

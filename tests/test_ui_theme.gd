@@ -13,9 +13,10 @@ func _run() -> void:
 	var service = ThemeServiceScript.new()
 	root.add_child(service)
 	service.initialize()
-	if service.current_theme_id() != "blue_healing" or service.catalog().size() < 2:
+	if service.current_theme_id() != "qq_warm" or service.catalog().size() < 3:
 		_fail("默认主题或主题目录不正确", 2)
 		return
+	service.set_theme("blue_healing")
 	var ui = UiFactoryScript.new(service.snapshot())
 	var label := ui.label("主题文字", 13, Color("12384a"))
 	var panel := ui.panel(Color("e9fbfbd4"), Color("a8e8e8e8"), 16)

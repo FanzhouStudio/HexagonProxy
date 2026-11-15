@@ -8,10 +8,18 @@ class FakeMihomo:
 	var core_pid := -1
 	var restarts := 0
 	var starts := 0
+	var stops := 0
+	func stop() -> void:
+		stops += 1
+		online = false
+		core_pid = -1
 	func restart() -> void: restarts += 1
 	func start() -> void: starts += 1
 
 class FakeCoreUpdate:
+	var before_install: Callable
+	var download_proxy_port := 0
+	func cancel() -> void: busy = false
 	signal progress_changed(progress: float, message: String)
 	signal finished(success: bool, message: String)
 	var busy := false
@@ -112,15 +120,23 @@ func _run() -> void:
 		return
 	mihomo.online = true
 	settings.core_update_requested.emit()
-	if core_update.downloads != 1 or settings.blocked_messages.is_empty():
-		_fail("在线时内核更新没有被阻止", 5)
+	if core_update.downloads != 2 or core_update.download_proxy_port != config.mixed or mihomo.stops != 0:
+		_fail("在线更新应通过代理下载且不能提前停内核", 5)
+		return
+	var ready: bool = await core_update.before_install.call()
+	if not ready or mihomo.stops != 1:
+		_fail("校验后安装前必须停止旧内核", 12)
+		return
+	core_update.finished.emit(false, "安装失败")
+	if mihomo.starts != 1:
+		_fail("安装失败后应恢复旧内核", 13)
 		return
 	settings.core_restart_requested.emit()
 	if mihomo.restarts != 1:
 		_fail("内核重启请求没有执行", 6)
 		return
 	core_update.finished.emit(true, "完成")
-	if mihomo.starts != 1:
+	if mihomo.starts != 2:
 		_fail("内核更新成功后没有启动 Mihomo", 7)
 		return
 

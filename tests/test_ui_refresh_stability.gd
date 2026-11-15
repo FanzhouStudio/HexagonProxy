@@ -34,6 +34,12 @@ func _run() -> void:
 	if panel.node_grid.get_instance_id() != grid_id or panel._node_views["A"].get("card").get_instance_id() != card_a_id:
 		_fail("相同 proxies 周期刷新仍然重建节点 UI", 3)
 		return
+	var original_style := card_a.get_theme_stylebox("panel")
+	for _index in 10:
+		panel.handle_api_result("proxies", true, _payload("A", ["A", "B", "C"]))
+	if card_a.get_theme_stylebox("panel") != original_style:
+		_fail("未变化的节点状态仍在创建新样式", 12)
+		return
 
 	panel.handle_api_result("delay:A", true, {"delay": 88})
 	var delay_label: Label = panel._node_views["A"].get("delay_label")
@@ -56,6 +62,17 @@ func _run() -> void:
 	if panel.node_grid.get_instance_id() != grid_id:
 		_fail("备选节点状态变化仍然重建整个节点网格", 6)
 		return
+	shell.show_page("subscription")
+	var hidden_style := card_a.get_theme_stylebox("panel")
+	panel.handle_api_result("proxies", true, _payload("C", ["A", "B", "C"]))
+	if card_a.get_theme_stylebox("panel") != hidden_style or choose_b.text != "已选":
+		_fail("隐藏节点页面仍在更新控件", 13)
+		return
+	shell.show_page("nodes")
+	var choose_c: Button = panel._node_views["C"].get("choose_button")
+	if choose_c.text != "已选" or choose_b.text != "选择":
+		_fail("重新显示节点页后状态没有恢复到最新数据", 14)
+		return
 
 	var many: Array = []
 	for index in 40:
@@ -70,20 +87,13 @@ func _run() -> void:
 		_fail("双缓冲节点网格没有在构建完成后完成交换", 8)
 		return
 	var background = shell.aquarium_background
-	if not is_instance_valid(background._background_rect) or not is_instance_valid(background._water_overlay):
-		_fail("水族背景没有拆分为静态背景层", 9)
-		return
-	if float(background.BUBBLE_FPS) > 30.0:
-		_fail("背景气泡刷新频率过高", 10)
-		return
-	var source := FileAccess.get_file_as_string("res://scripts/aquarium_background.gd")
-	if source.contains("draw_texture_rect"):
-		_fail("动态气泡层仍在重绘整张背景纹理", 11)
+	if not background is ColorRect or background.is_processing():
+		_fail("静态背景仍在执行逐帧绘制逻辑", 9)
 		return
 
 	scene.queue_free()
 	await process_frame
-	print("PASS: 周期刷新原地更新、节点双缓冲与静态背景分层")
+	print("PASS: unchanged style reuse, hidden-page suspension, latest-state restoration and buffered node rendering")
 	quit(0)
 
 func _fail(message: String, code: int) -> void:

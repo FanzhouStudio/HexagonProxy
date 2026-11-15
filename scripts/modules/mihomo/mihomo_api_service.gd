@@ -31,6 +31,10 @@ func request(action: String, endpoint: String, method: int, body := "") -> void:
 		if not data.is_empty():
 			var decoded: Variant = JSON.parse_string(data.get_string_from_utf8())
 			payload = decoded if decoded != null else data.get_string_from_utf8()
+		if not ok:
+			if not payload is Dictionary:
+				payload = {"message": str(payload)}
+			payload["_http_status"] = response_code
 		request_finished.emit(action, ok, payload)
 		http_request.queue_free()
 	)

@@ -14,13 +14,18 @@ class FakeMihomo:
 	var selected: Array[String] = []
 	var tested_proxies: Array[String] = []
 	var tested_groups: Array[String] = []
-	func refresh_runtime() -> void: refreshes += 1
+	var refresh_options: Array = []
+	func refresh_runtime(connections := true, metadata := true) -> void:
+		refreshes += 1
+		refresh_options.append([connections, metadata])
 	func poll_status() -> void: polls += 1
 	func select_proxy(group_name: String, proxy_name: String) -> void: selected.append(group_name + "/" + proxy_name)
 	func test_proxy_delay(proxy_name: String) -> void: tested_proxies.append(proxy_name)
 	func test_group_delay(group_name: String) -> void: tested_groups.append(group_name)
 	func set_mode(mode: String, _group := "") -> void: modes.append(mode)
 class FakeDashboard:
+	var active := true
+	func is_dashboard_active() -> bool: return active
 	signal mode_requested(mode: String)
 	var zero_samples := 0
 	var applied_connections := 0
@@ -30,6 +35,8 @@ class FakeDashboard:
 	func set_mode(mode: String) -> void: last_mode = mode
 
 class FakeNodes:
+	var active := true
+	func is_active() -> bool: return active
 	signal node_status_changed(node_name: String, delay: int)
 	signal proxy_select_requested(group_name: String, proxy_name: String)
 	signal proxy_delay_requested(proxy_name: String)
@@ -101,6 +108,15 @@ func _run() -> void:
 		_fail("周期轮询节奏与节点延迟测试不正确", 7)
 		return
 
+	dashboard.active = false
+	nodes.active = false
+	var hidden_refreshes: int = mihomo.refreshes
+	var hidden_probes: int = mihomo.tested_groups.size()
+	for _i in 10:
+		coordinator._on_poll_timer()
+	if mihomo.refreshes != hidden_refreshes + 1 or mihomo.refresh_options[-1] != [false, true] or mihomo.tested_groups.size() != hidden_probes:
+		_fail("隐藏页面不得持续获取连接列表或自动执行页面测速", 9)
+		return
 	coordinator.shutdown()
 	var refreshes_before_shutdown: int = mihomo.refreshes
 	var modes_before_shutdown: int = mihomo.modes.size()
