@@ -1,0 +1,52 @@
+extends SceneTree
+
+const Service = preload("res://scripts/modules/linux/linux_workspace_service.gd")
+const WorkspacePanel = preload("res://scripts/ui/linux_workspace_panel.gd")
+const Factory = preload("res://scripts/ui/ui_factory.gd")
+
+func _initialize() -> void:
+	call_deferred("_run")
+
+func _run() -> void:
+	assert(Service.virtual_disk_bytes(1) == 1073741824 - 16777216)
+	assert(Service.virtual_disk_bytes(10) < 10 * 1073741824)
+	for value in ["../escape", "/absolute", "C:/escape", "a/../escape", "a\\escape"]:
+		assert(not Service.safe_bundle_path(value), value)
+	assert(Service.safe_bundle_path("qemu/share/bios.bin"))
+	var service := Service.new()
+	service.storage_override = ProjectSettings.globalize_path("user://linux-test")
+	root.add_child(service)
+	service.initialize()
+	assert(service.disk_gb == 10)
+	assert(not service.snapshot().running)
+	assert(not service.start_workspace(0))
+	assert(not service.start_workspace(11))
+	assert(service.process_id == -1)
+	service.web_port = 23456
+	service._control_port = 23457
+	var args: PackedStringArray = service.launch_arguments(false)
+	assert("none" in args and "tcg,thread=multi" in args)
+	assert(args.has("user,id=net0,hostfwd=tcp:127.0.0.1:23456-:80"))
+	assert(not "-enable-kvm" in args)
+	assert(not "-cdrom" in args)
+	var seed: PackedByteArray = service._seed_archive("CONTROL_TOKEN='test'\n")
+	assert(seed.slice(0, 6).get_string_from_ascii() == "070701")
+	var factory := Factory.new()
+	var panel := WorkspacePanel.new()
+	root.add_child(panel)
+	panel.setup(factory)
+	var page := panel.build()
+	root.add_child(page)
+	panel.apply_state(service.snapshot())
+	assert(panel.disk_slider.min_value == 1 and panel.disk_slider.max_value == 10)
+	assert(panel.open_button.disabled)
+	var id := panel.start_button.get_instance_id()
+	panel.apply_state(service.snapshot())
+	assert(panel.start_button.get_instance_id() == id)
+	await service.shutdown()
+	service.dispose()
+	page.free()
+	panel.free()
+	service.free()
+	print("PASS: Linux disk limits, isolation, initrd seed and persistent controls")
+	quit()

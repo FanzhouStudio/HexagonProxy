@@ -20,6 +20,7 @@ const NodeFailoverServiceScript = preload("res://scripts/modules/reliability/nod
 const UiThemeServiceScript = preload("res://scripts/modules/ui/ui_theme_service.gd")
 const CodexProfileServiceScript = preload("res://scripts/modules/codex/codex_profile_service.gd")
 const AntigravityProxyServiceScript = preload("res://scripts/modules/antigravity/antigravity_proxy_service.gd")
+const LinuxWorkspaceServiceScript = preload("res://scripts/modules/linux/linux_workspace_service.gd")
 
 var service_container
 
@@ -70,6 +71,7 @@ func start() -> void:
 	service_container.register("ui_theme", ui_theme)
 	service_container.register("codex_profiles", codex_profiles)
 	service_container.register("antigravity_proxy", antigravity_proxy)
+	service_container.register("linux_workspace", LinuxWorkspaceServiceScript.new())
 	service_container.initialize_all()
 	autostart.migrate_legacy_registration()
 

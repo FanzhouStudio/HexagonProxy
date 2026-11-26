@@ -66,7 +66,7 @@ func _run() -> void:
 		settings.font_size_slider.value = percent
 		await create_timer(0.15).timeout
 		assert(scene.ui.font_size_percent == percent and settings.font_size_label.text == "%d%%" % percent)
-		for page_name in ["dashboard", "nodes", "subscription", "routing", "terminal", "codex", "antigravity", "settings"]:
+		for page_name in ["dashboard", "nodes", "subscription", "routing", "terminal", "linux", "codex", "antigravity", "settings"]:
 			scene.app_shell.show_page(page_name)
 			await process_frame
 			await process_frame

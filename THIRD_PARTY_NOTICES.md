@@ -1,5 +1,15 @@
 # 第三方软件声明
 
+## C++ / Qt 客户端
+
+Qt 6.10.2 Core、GUI、Widgets、Network、Concurrent 与 SVG 使用动态链接，许可原文、源码位置及替换方式见 [third_party/qt/UPSTREAM.md](third_party/qt/UPSTREAM.md)。yaml-cpp 0.8.0 使用 MIT 许可，随包保留 `YAML-CPP-LICENSE.txt`。
+
+Linux 内嵌页面使用 Microsoft WebView2 SDK 1.0.4370.26 的静态加载器，适用随包 `WEBVIEW2-LICENSE.txt`，SDK 来源为 [官方 NuGet 包](https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4370.26)。页面运行使用系统 Evergreen Runtime，分发说明见 [微软文档](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。
+
+## QEMU / Linux / Tuxee（可选的内置 Linux 工作区）
+
+构建时随唯一的 `HexagonProxy.exe` 嵌入离线运行包，首次使用时展开，由独立 QEMU 进程运行。来源、版本、校验方式、对应源码及许可证说明见 [third_party/linux_runtime/UPSTREAM.md](third_party/linux_runtime/UPSTREAM.md)。包内保留 QEMU `COPYING` / `COPYING.LIB` 和 Debian 组件版权文件；每个文件的摘要记录在包内 `manifest.json` 中。第三方组件的许可证不因本项目 AGPL 或商业授权而改变。
+
 ## Antigravity-Proxy（可选部署的原生组件）
 
 - 项目与对应源码：https://github.com/yuaotian/antigravity-proxy/tree/v2.4

@@ -9,6 +9,7 @@ const NodeRuntimeCoordinatorScript = preload("res://scripts/app/node_runtime_coo
 const NodeFailoverCoordinatorScript = preload("res://scripts/app/node_failover_coordinator.gd")
 const RoutingCoordinatorScript = preload("res://scripts/app/routing_coordinator.gd")
 const TerminalCoordinatorScript = preload("res://scripts/app/terminal_coordinator.gd")
+const LinuxWorkspaceCoordinatorScript = preload("res://scripts/app/linux_workspace_coordinator.gd")
 const CodexProfileCoordinatorScript = preload("res://scripts/app/codex_profile_coordinator.gd")
 const AntigravityProxyCoordinatorScript = preload("res://scripts/app/antigravity_proxy_coordinator.gd")
 const WindowModeControllerScript = preload("res://scripts/app/window_mode_controller.gd")
@@ -44,6 +45,7 @@ var node_runtime_coordinator: NodeRuntimeCoordinator
 var node_failover_coordinator: NodeFailoverCoordinator
 var routing_coordinator: RoutingCoordinator
 var terminal_coordinator: TerminalCoordinator
+var linux_workspace_coordinator: LinuxWorkspaceCoordinator
 var codex_profile_coordinator: CodexProfileCoordinator
 var antigravity_proxy_coordinator: AntigravityProxyCoordinator
 var window_mode_controller: WindowModeController
@@ -145,6 +147,11 @@ func _ready() -> void:
 	add_child(app_shell)
 	app_shell.setup(self, ui, dashboard_panel, nodes_panel, subscription_panel, routing_panel, terminal_panel, codex_accounts_panel, settings_panel)
 	app_shell.build(subscription_service.current_profile_name)
+	linux_workspace_coordinator = LinuxWorkspaceCoordinatorScript.new()
+	add_child(linux_workspace_coordinator)
+	var linux_workspace_service = app.get_service("linux_workspace")
+	linux_workspace_service.event_logged.connect(dashboard_panel.append_log)
+	linux_workspace_coordinator.setup(linux_workspace_service, app_shell.linux_workspace_panel)
 	var antigravity_proxy_service = app.get_service("antigravity_proxy")
 	antigravity_proxy_service.event_logged.connect(dashboard_panel.append_log)
 	antigravity_proxy_coordinator = AntigravityProxyCoordinatorScript.new()
@@ -213,6 +220,10 @@ func _quit_application() -> void:
 	if _quitting:
 		return
 	_quitting = true
+	var linux_workspace_service = app.get_service("linux_workspace")
+	if linux_workspace_service != null and not await linux_workspace_service.shutdown():
+		_quitting = false
+		return
 	if runtime:
 		runtime.shutdown()
 	if subscription_coordinator:

@@ -5,6 +5,7 @@ signal window_action_requested(action_id: String)
 
 const AquariumBackgroundScript = preload("res://scripts/aquarium_background.gd")
 const AntigravityProxyPanelScript = preload("res://scripts/ui/antigravity_proxy_panel.gd")
+const LinuxWorkspacePanelScript = preload("res://scripts/ui/linux_workspace_panel.gd")
 const WINDOW_ACTIONS := [
 	{"id": "minimize", "text": "最小化", "tooltip": "最小化到任务栏", "width": 84},
 	{"id": "close", "text": "关闭", "tooltip": "关闭主窗口并继续后台守护", "width": 72},
@@ -24,6 +25,7 @@ var routing_panel: RoutingPanel
 var terminal_panel: TerminalPanel
 var codex_accounts_panel: CodexAccountsPanel
 var antigravity_proxy_panel: AntigravityProxyPanel
+var linux_workspace_panel: LinuxWorkspacePanel
 var settings_panel: SettingsPanel
 var page_host: Control
 var pages := {}
@@ -91,6 +93,7 @@ func build(profile_name: String) -> void:
 	_add_nav(side, "subscription", "↻  订阅")
 	_add_nav(side, "routing", "⇄  分流")
 	_add_nav(side, "terminal", ">_  终端")
+	_add_nav(side, "linux", "▣  Linux 工作区")
 	_add_nav(side, "codex", "◈  Codex 账号")
 	_add_nav(side, "antigravity", "↗  Antigravity")
 	_add_nav(side, "settings", "⚙  设置")
@@ -117,6 +120,10 @@ func build(profile_name: String) -> void:
 	pages["subscription"] = subscription_panel.build()
 	pages["routing"] = routing_panel.build()
 	pages["terminal"] = terminal_panel.build()
+	linux_workspace_panel = LinuxWorkspacePanelScript.new()
+	add_child(linux_workspace_panel)
+	linux_workspace_panel.setup(ui)
+	pages["linux"] = linux_workspace_panel.build()
 	pages["codex"] = codex_accounts_panel.build()
 	antigravity_proxy_panel = AntigravityProxyPanelScript.new()
 	add_child(antigravity_proxy_panel)
@@ -138,6 +145,7 @@ func show_page(page_id: String) -> void:
 		"subscription": "订阅管理",
 		"routing": "应用分流",
 		"terminal": "内置终端",
+		"linux": "Linux 工作区",
 		"codex": "Codex 账号",
 		"antigravity": "Antigravity",
 		"settings": "偏好设置"

@@ -1,0 +1,260 @@
+{
+  "tuxee": "1.5.0",
+  "sources": [
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz",
+      "file": "APKINDEX.tar.gz",
+      "sha256": "eb433503800d52eef6ca11dd05cd34de07a6fc60c444406edf52455a1a3dc991"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/busybox-static-1.37.0-r20.apk",
+      "file": "busybox-static-1.37.0-r20.apk",
+      "sha256": "488ad6efd04b5a722719e79f8e0dcc2c24afd6758867af3ce41b04839e60c74b"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/musl-1.2.5-r13.apk",
+      "file": "musl-1.2.5-r13.apk",
+      "sha256": "359890bc7c4dc5fee7a85192de60a471c987e4664767288578beca60a44db2c8"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/linux-virt-6.12.119-r0.apk",
+      "file": "linux-virt-6.12.119-r0.apk",
+      "sha256": "e38b6ba4c80d4c99f1130418154d8d4dd02d9adc1fbb9eaeae330e8430de8875"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/mkinitfs-3.12.0-r0.apk",
+      "file": "mkinitfs-3.12.0-r0.apk",
+      "sha256": "18d6384d6db016ca41d43fe78acf9c72db5eb01a906b17568afed217b309ffc8"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/apk-tools-2.14.13-r0.apk",
+      "file": "apk-tools-2.14.13-r0.apk",
+      "sha256": "0bda906a0a82c10c028fdabe40f4acab790ab819f5802f817f45fcb711f1d111"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/libcrypto3-3.5.9-r2.apk",
+      "file": "libcrypto3-3.5.9-r2.apk",
+      "sha256": "931ac2f8cd696a47221b6317f650eb5e0ed5bf8f04d34ae7b9573027801d3544"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/musl-1.2.5-r13.apk",
+      "file": "musl-1.2.5-r13.apk",
+      "sha256": "359890bc7c4dc5fee7a85192de60a471c987e4664767288578beca60a44db2c8"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/ca-certificates-bundle-20261020-r0.apk",
+      "file": "ca-certificates-bundle-20261020-r0.apk",
+      "sha256": "d35216a0a9adde79031df246759bad03f235cf201bf0aff8436b88bff59594eb"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/libapk2-2.14.13-r0.apk",
+      "file": "libapk2-2.14.13-r0.apk",
+      "sha256": "c6e80ca7a7e0b4d94f4aa7657b0c1f9f15a8d8e5a19455b8f6c829559e708bd1"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/libcrypto3-3.5.9-r2.apk",
+      "file": "libcrypto3-3.5.9-r2.apk",
+      "sha256": "931ac2f8cd696a47221b6317f650eb5e0ed5bf8f04d34ae7b9573027801d3544"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/libssl3-3.5.9-r2.apk",
+      "file": "libssl3-3.5.9-r2.apk",
+      "sha256": "678f241a05f34858762790eac31599def62e3963702d13c62b0aa4720681fea1"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/zlib-1.4-r0.apk",
+      "file": "zlib-1.4-r0.apk",
+      "sha256": "a271d6491037f7037010ac98b40f7d2b81c733f425b20294ee771b6ed7571038"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/busybox-binsh-1.37.0-r20.apk",
+      "file": "busybox-binsh-1.37.0-r20.apk",
+      "sha256": "ad33d8d799ed80eab45bb68d63c14062165d3653f4fb52e73959cd31d032210e"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/busybox-1.37.0-r20.apk",
+      "file": "busybox-1.37.0-r20.apk",
+      "sha256": "7cc34c2dda2520b456ab4a55abc37fe245ac90f98ab9f1c7a9be3aec035df48e"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/kmod-34.2-r0.apk",
+      "file": "kmod-34.2-r0.apk",
+      "sha256": "c38a1c6b7e7baa84a698c32b0b179c2bbb00be67515e64768ea145891ae2fb83"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/busybox-binsh-1.37.0-r20.apk",
+      "file": "busybox-binsh-1.37.0-r20.apk",
+      "sha256": "ad33d8d799ed80eab45bb68d63c14062165d3653f4fb52e73959cd31d032210e"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/xz-libs-5.8.4-r0.apk",
+      "file": "xz-libs-5.8.4-r0.apk",
+      "sha256": "37e169b7b400304fa7027cab79f9c1c7a280e83acf6c95463384b8abb7ebb254"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/zstd-libs-1.6.0-r1.apk",
+      "file": "zstd-libs-1.6.0-r1.apk",
+      "sha256": "104620bbdad7095d3849b79c6b3acdff656c4699b83a6fba79adbe26e1cc65b6"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/lddtree-1.27-r0.apk",
+      "file": "lddtree-1.27-r0.apk",
+      "sha256": "01b34f98cf8da09a843f985a04c24d64b225a14c78b08afa099889d269975d98"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/scanelf-1.3.8-r1.apk",
+      "file": "scanelf-1.3.8-r1.apk",
+      "sha256": "8763270cf55b2a38dae0cea774e8dcab547b710fa59e03054924d61a5eba609e"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/mdev-conf-4.8-r0.apk",
+      "file": "mdev-conf-4.8-r0.apk",
+      "sha256": "2043890a839957af15e430fd0c34a369f6c911eed3dc89a3ac7a073b0d6af2f0"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/libblkid-2.41.6-r1.apk",
+      "file": "libblkid-2.41.6-r1.apk",
+      "sha256": "ab85cd837c906979c24e5a006a81789ae9715e6e913c421c71950bdf1450164c"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/libeconf-0.6.3-r0.apk",
+      "file": "libeconf-0.6.3-r0.apk",
+      "sha256": "fe4fbf324f84f7c8b475cfc708c5505aa630bced7b5f6289bf5ca36d9b587829"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/cryptsetup-libs-2.7.5-r1.apk",
+      "file": "cryptsetup-libs-2.7.5-r1.apk",
+      "sha256": "9d82982065e82d72add61997b2ed4e89e31b38dc911851441c86a926dcfcd9c4"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/device-mapper-libs-2.03.32-r0.apk",
+      "file": "device-mapper-libs-2.03.32-r0.apk",
+      "sha256": "2b1e8bbf13cc79d1909b31e505f06ce149c9855971f398695d63b100d250a000"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/json-c-0.18-r1.apk",
+      "file": "json-c-0.18-r1.apk",
+      "sha256": "91d3efdc4577d724e185ad1d655f32437c788533891788885d4267c7bdb84d97"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/libuuid-2.41.6-r1.apk",
+      "file": "libuuid-2.41.6-r1.apk",
+      "sha256": "eb8fa9e042b51443a6ac8c9fa4d1dca5a1a458c5f3980bffa5167f005f47a504"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/kmod-libs-34.2-r0.apk",
+      "file": "kmod-libs-34.2-r0.apk",
+      "sha256": "47f1e863dc779503ff24977f738135020407b03e5e5ec3d41187df14766613d7"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/e2fsprogs-1.47.2-r2.apk",
+      "file": "e2fsprogs-1.47.2-r2.apk",
+      "sha256": "4e59067f388ba8338dca3babd5784799d2d434eb6c19076d17ff96e50fbb1a49"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/libcom_err-1.47.2-r2.apk",
+      "file": "libcom_err-1.47.2-r2.apk",
+      "sha256": "bb138d264fbf92ae95b355b43b0cf2ab59ce4abcb0594024bb687e3eecc490a4"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/e2fsprogs-libs-1.47.2-r2.apk",
+      "file": "e2fsprogs-libs-1.47.2-r2.apk",
+      "sha256": "4aeee327c9d8465ca403e4283e07055c353a2e3446f69113e624c91eab2e7e9e"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/e2fsprogs-libs-1.47.2-r2.apk",
+      "file": "e2fsprogs-libs-1.47.2-r2.apk",
+      "sha256": "4aeee327c9d8465ca403e4283e07055c353a2e3446f69113e624c91eab2e7e9e"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/e2fsprogs-extra-1.47.2-r2.apk",
+      "file": "e2fsprogs-extra-1.47.2-r2.apk",
+      "sha256": "9d471e7448337f204fdb82f8b5a5618d26104616184aa3f779c3c33ffa7c39e5"
+    },
+    {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/e2fsprogs-libs-1.47.2-r2.apk",
+      "file": "e2fsprogs-libs-1.47.2-r2.apk",
+      "sha256": "4aeee327c9d8465ca403e4283e07055c353a2e3446f69113e624c91eab2e7e9e"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+      "file": "sha256-37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41.gz",
+      "sha256": "37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:738119a603e4031b0db3ad426b9fe1c17dfe8e0644b610b98472bdedd4225cad",
+      "file": "sha256-738119a603e4031b0db3ad426b9fe1c17dfe8e0644b610b98472bdedd4225cad.gz",
+      "sha256": "738119a603e4031b0db3ad426b9fe1c17dfe8e0644b610b98472bdedd4225cad"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:970b2b17f21148a30c6ac91454b1eea59e08143cdf24ca63c99240dfb76df9a0",
+      "file": "sha256-970b2b17f21148a30c6ac91454b1eea59e08143cdf24ca63c99240dfb76df9a0.gz",
+      "sha256": "970b2b17f21148a30c6ac91454b1eea59e08143cdf24ca63c99240dfb76df9a0"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:b912c42fb5f8c324ec723ca854b943e95a5d900aa73782935e4069a7393791d3",
+      "file": "sha256-b912c42fb5f8c324ec723ca854b943e95a5d900aa73782935e4069a7393791d3.gz",
+      "sha256": "b912c42fb5f8c324ec723ca854b943e95a5d900aa73782935e4069a7393791d3"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:56ae1c2007845bd47b46e7aff08a7da98f23d2fa173b1a97c722f56d9c7b3be9",
+      "file": "sha256-56ae1c2007845bd47b46e7aff08a7da98f23d2fa173b1a97c722f56d9c7b3be9.gz",
+      "sha256": "56ae1c2007845bd47b46e7aff08a7da98f23d2fa173b1a97c722f56d9c7b3be9"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:828230b7eb2068988f027833e529c9fe5a6e61d10a09eaf15ff2cfd92855741a",
+      "file": "sha256-828230b7eb2068988f027833e529c9fe5a6e61d10a09eaf15ff2cfd92855741a.gz",
+      "sha256": "828230b7eb2068988f027833e529c9fe5a6e61d10a09eaf15ff2cfd92855741a"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:d5ebe6d41cede2c3a9bd4dfce95b8ffd5d57068f101b48ec7e9784cc1ec5a2c8",
+      "file": "sha256-d5ebe6d41cede2c3a9bd4dfce95b8ffd5d57068f101b48ec7e9784cc1ec5a2c8.gz",
+      "sha256": "d5ebe6d41cede2c3a9bd4dfce95b8ffd5d57068f101b48ec7e9784cc1ec5a2c8"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:fd54f18ca609a943e603dba9c5ae024a9459efbc2b5215d43ac78201c9a09f88",
+      "file": "sha256-fd54f18ca609a943e603dba9c5ae024a9459efbc2b5215d43ac78201c9a09f88.gz",
+      "sha256": "fd54f18ca609a943e603dba9c5ae024a9459efbc2b5215d43ac78201c9a09f88"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:ebb941d20565c96c335b27dce313ad6da209cef22f9219f7621f6df950de97a8",
+      "file": "sha256-ebb941d20565c96c335b27dce313ad6da209cef22f9219f7621f6df950de97a8.gz",
+      "sha256": "ebb941d20565c96c335b27dce313ad6da209cef22f9219f7621f6df950de97a8"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:3e6b8bda5a31e437d8947c9635439afe29768620769b04e31c8ab354cab5d301",
+      "file": "sha256-3e6b8bda5a31e437d8947c9635439afe29768620769b04e31c8ab354cab5d301.gz",
+      "sha256": "3e6b8bda5a31e437d8947c9635439afe29768620769b04e31c8ab354cab5d301"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:a7ee9631f6c46d6c4b4e37c86fd83bdae2aca1687c347435439341d01ac5d1d4",
+      "file": "sha256-a7ee9631f6c46d6c4b4e37c86fd83bdae2aca1687c347435439341d01ac5d1d4.gz",
+      "sha256": "a7ee9631f6c46d6c4b4e37c86fd83bdae2aca1687c347435439341d01ac5d1d4"
+    },
+    {
+      "url": "https://registry-1.docker.io/v2/agent0ai/tuxee/blobs/sha256:9bf250503b32441348bbfb0a98b8382ac2f4af0ef43ad4dfaca0dc19c7135739",
+      "file": "sha256-9bf250503b32441348bbfb0a98b8382ac2f4af0ef43ad4dfaca0dc19c7135739.gz",
+      "sha256": "9bf250503b32441348bbfb0a98b8382ac2f4af0ef43ad4dfaca0dc19c7135739"
+    },
+    {
+      "url": "https://qemu.weilnetz.de/w64/2026/qemu-w64-setup-20260811.sha512",
+      "file": "qemu.sha512",
+      "sha256": "a160b60c5a6a782e6405651968ac932c60b8c4576503979ec259fb35fb7e9b46"
+    },
+    {
+      "url": "https://qemu.weilnetz.de/w64/2026/qemu-w64-setup-20260811.exe",
+      "file": "qemu-installer.exe",
+      "sha256": "f98a8aeb5f7faea9765b6dee28316c266cd179d80354a2fed8e50176f9a2e59f"
+    },
+    {
+      "url": "https://api.nuget.org/v3-flatcontainer/7-zip.commandline/25.1.0/7-zip.commandline.25.1.0.nupkg",
+      "file": "7zip.zip",
+      "sha256": "ff4901e41cecf902c2d49b06cc836a2cb170d09ab934dc9e5d2fc5bfed7878a9"
+    },
+    {
+      "url": "https://www.7-zip.org/a/7z2501-x64.exe",
+      "file": "7zip-full.exe",
+      "sha256": "78afa2a1c773caf3cf7edf62f857d2a8a5da55fb0fff5da416074c0d28b2b55f"
+    }
+  ]
+}

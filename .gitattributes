@@ -7,7 +7,11 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.mjs text eol=lf
+*.sh text eol=lf
 *.ps1 text eol=crlf
+*.cpp text eol=lf
+*.h text eol=lf
+CMakeLists.txt text eol=lf
 
 *.ico binary
 *.png binary

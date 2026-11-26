@@ -8,6 +8,7 @@ export_templates/
 feature_profiles/
 script_templates/
 text_editor_themes/
+third_party/linux_runtime/runtime.zip
 
 *.log
 *.tmp
